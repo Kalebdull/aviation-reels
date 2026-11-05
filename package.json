@@ -1,0 +1,10 @@
+{
+  "name": "aviation-reels",
+  "version": "1.0.0",
+  "private": true,
+  "description": "30-second aviation lessons for Instagram, made in code",
+  "type": "module",
+  "dependencies": {
+    "playwright": "1.63.0"
+  }
+}

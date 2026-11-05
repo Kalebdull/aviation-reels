@@ -1,0 +1,2 @@
+# One spoken line per row, exactly as in the CapCut block (without the ". . .").
+# Optional caption override after " | " — use *word* for an amber keyword, "-" for no caption.

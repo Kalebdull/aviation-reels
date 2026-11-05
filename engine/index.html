@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Episode preview</title>
+<style>
+  html, body { margin: 0; background: #111; }
+  #c { display: block; transform-origin: 0 0; }
+  body.render #ui { display: none; }
+  body.render { overflow: hidden; }
+  #ui { position: fixed; left: 0; right: 0; bottom: 0; display: flex; gap: 12px; align-items: center; padding: 10px 16px; background: #0b0b0b; color: #ccc; font: 13px/1.2 ui-monospace, Menlo, monospace; }
+  #ui input { flex: 1; } #ui button { background: #333; color: #eee; border: 0; padding: 6px 12px; border-radius: 6px; cursor: pointer; }
+  #err { position: fixed; top: 10px; left: 10px; right: 10px; color: #ff8080; font: 14px ui-monospace, monospace; white-space: pre-wrap; }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="err"></div>
+<div id="ui"><button id="play">▶ play</button><input id="scrub" type="range" min="0" max="1000" value="0"><span id="time">0.00s</span><span>space play · ←/→ frame · shift 0.5 s</span></div>
+<script src="lib/motion.js"></script>
+<script src="lib/draw.js"></script>
+<script src="lib/world.js"></script>
+<script src="lib/props.js"></script>
+<script src="lib/instruments.js"></script>
+<script src="lib/ui.js"></script>
+<script src="lib/brand.js"></script>
+<script src="lib/film.js"></script>
+<script>
+(function () {
+  const q = new URLSearchParams(location.search), ep = q.get('ep');
+  const base = `../episodes/${ep}/`;
+  const err = m => { document.getElementById('err').textContent += m + '\n'; console.error(m); };
+  if (!ep) return err('add ?ep=<episode-folder> to the URL');
+  if (q.has('render')) document.body.classList.add('render');
+  const load = src => new Promise((res, rej) => { const s = document.createElement('script'); s.src = src; s.onload = res; s.onerror = () => rej(new Error('missing ' + src)); document.head.appendChild(s); });
+  window.READY = (async () => {
+    try { await load(base + 'timing.js'); } catch (e) { err('no timing.js yet — run scripts/vo.py (or vo.py --estimate) for this episode'); window.TIMING = null; }
+    await load(base + 'episode.js');
+    await window.FILM_BOOT();
+    return true;
+  })();
+  window.READY.catch(e => err(e.stack || e.message));
+  if (q.has('render')) return;
+
+  // ---- preview player (never used when rendering) ----
+  const c = document.getElementById('c');
+  const fit = () => { const s = Math.min((innerHeight - 46) / 1920, innerWidth / 1080); c.style.transform = `scale(${s})`; c.style.marginLeft = ((innerWidth - 1080 * s) / 2) + 'px'; };
+  addEventListener('resize', fit); fit();
+  window.READY.then(async () => {
+    const audio = new Audio(); let hasAudio = false;
+    for (const src of [base + 'audio/mix.wav', base + 'audio/vo.wav']) { try { const r = await fetch(src, { method: 'HEAD' }); if (r.ok) { audio.src = src; hasAudio = true; break; } } catch (e) {} }
+    let playing = false, t = 0, t0 = 0, w0 = 0;
+    const D = window.DURATION, scrub = document.getElementById('scrub'), tm = document.getElementById('time'), btn = document.getElementById('play');
+    const show = () => { seek(t); scrub.value = Math.round(t / D * 1000); tm.textContent = t.toFixed(2) + 's'; };
+    const toggle = () => { playing = !playing; btn.textContent = playing ? '❚❚ pause' : '▶ play'; if (playing) { if (t >= D - 0.02) t = 0; t0 = t; w0 = performance.now(); if (hasAudio) { audio.currentTime = t; audio.play(); } } else if (hasAudio) audio.pause(); };
+    const tick = () => { if (playing) { t = hasAudio ? audio.currentTime : t0 + (performance.now() - w0) / 1000; if (t >= D) { t = D; toggle(); } show(); } requestAnimationFrame(tick); };
+    btn.onclick = toggle;
+    scrub.oninput = () => { t = scrub.value / 1000 * D; if (hasAudio) audio.currentTime = t; show(); };
+    addEventListener('keydown', e => { if (e.code === 'Space') { e.preventDefault(); toggle(); } if (e.code === 'ArrowRight' || e.code === 'ArrowLeft') { t = Math.max(0, Math.min(D, t + (e.code === 'ArrowRight' ? 1 : -1) * (e.shiftKey ? 0.5 : 1 / 60))); if (hasAudio) audio.currentTime = t; show(); } });
+    show(); tick();
+  });
+})();
+</script>
+</body>
+</html>

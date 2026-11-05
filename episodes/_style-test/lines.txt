@@ -1,0 +1,6 @@
+# STYLE TEST ONLY: proves the look and the engine. Not a real episode.
+How does your airplane know how fast it's going? | How does your airplane know how *fast* it's going?
+This little tube faces straight into the wind. | This little tube faces *into the wind*.
+The faster you fly, the harder air rams in.
+That push swings your airspeed needle. | That push swings your *airspeed* needle.
+But if ice blocks it, the needle drops to zero. | If *ice* blocks it, the needle drops to *zero*.
