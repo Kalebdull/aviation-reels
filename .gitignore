@@ -9,3 +9,4 @@ episodes/*/audio/*.48k.wav
 # raw CapCut exports are big; vo.py keeps a small vo.m4a copy that is committed
 episodes/*/audio/*.mov
 episodes/*/audio/*.mp4
+assets/models/*.blend1

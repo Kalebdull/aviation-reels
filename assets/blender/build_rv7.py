@@ -18,10 +18,13 @@ from mathutils import Vector, Matrix
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
 OUT = os.path.join(ROOT, 'assets', 'models')
 ARGS = sys.argv[sys.argv.index('--') + 1:] if '--' in sys.argv else sys.argv[1:]
-ACCENT = '#F26B1D'          # aviation orange; change here and re-run
+# Livery: one soft body colour + a lighter trim + one accent. Change here (or --body= --trim= --accent=) and re-run.
+BODY, TRIM, ACCENT = '#8FB3D9', '#F6F1E7', '#E8836A'
 for a in ARGS:
-    if a.startswith('--accent='):
-        ACCENT = a.split('=', 1)[1]
+    if a.startswith('--body='): BODY = a.split('=', 1)[1]
+    if a.startswith('--trim='): TRIM = a.split('=', 1)[1]
+    if a.startswith('--accent='): ACCENT = a.split('=', 1)[1]
+TAG = next((a.split('=', 1)[1] for a in ARGS if a.startswith('--tag=')), '')
 
 
 # ---------------------------------------------------------------- helpers
@@ -120,9 +123,11 @@ def section(x, n=48, k=2.9):
 
 
 def build(sc):
-    accent = material('Accent', ACCENT, rough=0.28, coat=1.0)
-    alu = material('PolishedAluminium', (0.91, 0.92, 0.94, 1), metallic=1.0, rough=0.12, aniso=0.35)
-    glass = material('Canopy', (0.80, 0.86, 0.92, 1), rough=0.02, transmission=1.0, ior=1.5)
+    # soft satin paint: easy on the eye, reads well small, looks the same in every light
+    alu = material('Body', BODY, rough=0.42, coat=0.5)
+    trim = material('Trim', TRIM, rough=0.4, coat=0.5)
+    accent = material('Accent', ACCENT, rough=0.38, coat=0.5)
+    glass = material('Canopy', (0.78, 0.86, 0.93, 1), rough=0.03, transmission=1.0, ior=1.03)   # thin-shell look: low IOR, no lensing
     rubber = material('Rubber', '#1E2026', rough=0.7)
     steel = material('Steel', '#6E7682', metallic=0.8, rough=0.35)
     dark = material('Interior', '#2A2E36', rough=0.6)
@@ -144,9 +149,9 @@ def build(sc):
         if abs(side) > 0.55 and band and 0.6 < x < 5.9:
             return 1
         if x < 0.55:
-            return 1
+            return 2
         return 0
-    mesh_object('Fuselage', loft(rings, mat_of=fmat), (alu, accent), parent=root)
+    mesh_object('Fuselage', loft(rings, mat_of=fmat), (alu, trim, accent), parent=root)
 
     # canopy bubble (glass) on top, from the panel to behind the seats
     cr = []
@@ -168,7 +173,7 @@ def build(sc):
     # canopy frame bow
     bm = bmesh.new(); bmesh.ops.create_cone(bm, cap_ends=True, segments=16, radius1=0.018, radius2=0.018, depth=1.1)
     bmesh.ops.rotate(bm, verts=bm.verts, cent=(0, 0, 0), matrix=Matrix.Rotation(math.pi / 2, 3, 'X'))
-    bow = mesh_object('CanopyBow', bm, (alu,), subsurf=0, parent=root); bow.location = (2.95, 0, 0.78)
+    bow = mesh_object('CanopyBow', bm, (trim,), subsurf=0, parent=root); bow.location = (2.95, 0, 0.78)
 
     # interior: panel + two seats (seen through the glass)
     for y in (0.27, -0.27):
@@ -200,7 +205,7 @@ def build(sc):
         wrings.append([(2.18 + px * (c / chord) - (chord - c) * 0.1, y, z0 + pz * (th / 0.135) * (c / chord)) for px, pz in airfoil(chord)])
     def wmat(i, j):
         return 1 if abs(ys[i]) > half - 0.45 else 0                     # accent wingtips
-    mesh_object('Wing', loft(wrings, mat_of=wmat), (alu, accent), parent=root)
+    mesh_object('Wing', loft(wrings, mat_of=wmat), (alu, trim), parent=root)
 
     # horizontal stabiliser + elevator
     hr = []
@@ -234,7 +239,7 @@ def build(sc):
         fr.append(ring)
     def rmat(i, j):
         return 1 if zs[i] > 0.85 else 0
-    mesh_object('Fin', loft(fr, mat_of=rmat), (alu, accent), parent=root)
+    mesh_object('Fin', loft(fr, mat_of=rmat), (alu, trim), parent=root)
 
     # cowling inlets (dark ovals on the front) + spinner + prop
     for y in (0.17, -0.17):
@@ -257,12 +262,12 @@ def build(sc):
     for sgn in (1, -1):
         a, b = Vector((1.38, sgn * 0.45, -0.42)), Vector((1.46, sgn * 0.92, -0.92))
         bm = bmesh.new(); bmesh.ops.create_cone(bm, cap_ends=True, segments=12, radius1=0.05, radius2=0.03, depth=(b - a).length)
-        leg = mesh_object('GearLeg', bm, (alu,), subsurf=1, parent=root)
+        leg = mesh_object('GearLeg', bm, (trim,), subsurf=1, parent=root)
         leg.location = (a + b) / 2; leg.rotation_euler = (Vector((0, 0, 1))).rotation_difference(b - a).to_euler()
         bm = bmesh.new(); bmesh.ops.create_uvsphere(bm, u_segments=32, v_segments=16, radius=0.30)
         for v in bm.verts:
             v.co.x *= 1.25 if v.co.x > 0 else 1.85; v.co.y *= 0.36; v.co.z *= 0.62
-        pant = mesh_object('WheelPant', bm, (accent,), subsurf=1, parent=root); pant.location = (1.46, sgn * 0.95, -0.98)
+        pant = mesh_object('WheelPant', bm, (alu,), subsurf=1, parent=root); pant.location = (1.46, sgn * 0.95, -0.98)
         bm = bmesh.new(); bmesh.ops.create_cone(bm, cap_ends=True, segments=24, radius1=0.17, radius2=0.17, depth=0.12)
         bmesh.ops.rotate(bm, verts=bm.verts, cent=(0, 0, 0), matrix=Matrix.Rotation(math.pi / 2, 3, 'X'))
         tire = mesh_object('Tire', bm, (rubber,), subsurf=1, parent=root); tire.location = (1.46, sgn * 0.95, -1.04)
@@ -308,8 +313,11 @@ def preview(sc, root):
     em = N.new('ShaderNodeEmission'); Lk.new(mix.outputs[2], em.inputs['Color']); em.inputs['Strength'].default_value = 0.0
     gnd.data.materials.append(gm)
     sun = bpy.data.objects.new('Sun', bpy.data.lights.new('Sun', 'SUN')); sc.collection.objects.link(sun)
-    sun.data.energy = 4.2; sun.data.color = (1.0, 0.78, 0.55); sun.data.angle = math.radians(2.5)
-    sun.rotation_euler = (math.radians(81), 0, math.radians(215 + 90))
+    sun.data.energy = 3.6; sun.data.color = (1.0, 0.78, 0.55); sun.data.angle = math.radians(2.5)
+    # key light from the camera side, ~22° up: shows the colour and the form (a classic beauty-light setup)
+    sun.rotation_euler = (-Vector((1.0, 0.75, 0.55))).to_track_quat('-Z', 'Y').to_euler()
+    fill = bpy.data.objects.new('Rim', bpy.data.lights.new('Rim', 'SUN')); sc.collection.objects.link(fill)
+    fill.data.energy = 2.2; fill.data.color = (1.0, 0.72, 0.5); fill.rotation_euler = (-Vector((-1.0, -0.4, 0.35))).to_track_quat('-Z', 'Y').to_euler()
     cam = bpy.data.objects.new('Cam', bpy.data.cameras.new('Cam')); sc.collection.objects.link(cam); sc.camera = cam
     cam.data.lens = 85; cam.data.dof.use_dof = True; cam.data.dof.focus_object = root; cam.data.dof.aperture_fstop = 2.8
     r = sc.render
@@ -319,13 +327,13 @@ def preview(sc, root):
     sc.view_settings.view_transform = 'AgX' if 'AgX' in [i.identifier for i in sc.view_settings.bl_rna.properties['view_transform'].enum_items] else 'Filmic'
     looks = [i.identifier for i in sc.view_settings.bl_rna.properties['look'].enum_items]
     sc.view_settings.look = next((l for l in looks if 'Punchy' in l), 'None')
-    shots = {'front34': ((15.0, 14.0, 4.2), (2.6, 0.0, -0.2)), 'side': ((3.0, 24.0, 0.6), (3.0, 0, 0.0)), 'rear34': ((-10.5, -15.0, 4.5), (2.8, 0, 0.1))}
+    shots = {'front34': ((19.5, 18.0, 5.2), (2.7, 0.0, -0.1)), 'beauty': ((13.5, 12.0, -0.6), (2.6, 0.0, 0.35)), 'side': ((3.0, 24.0, 0.6), (3.0, 0, 0.0)), 'rear34': ((-10.5, -15.0, 4.5), (2.8, 0, 0.1))}
     which = [a.split('=', 1)[1] for a in ARGS if a.startswith('--shot=')] or list(shots)
     for name in which:
         loc, look = shots[name]
         cam.location = loc
         d = Vector(look) - Vector(loc); cam.rotation_euler = d.to_track_quat('-Z', 'Y').to_euler()
-        r.filepath = os.path.join(OUT, f'rv7_preview_{name}.png')
+        r.filepath = os.path.join(OUT, f'rv7_preview_{name}{TAG}.png')
         bpy.ops.render.render(write_still=True)
         print('preview →', r.filepath)
 
