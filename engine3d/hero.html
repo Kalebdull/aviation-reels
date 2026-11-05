@@ -1,0 +1,25 @@
+<!doctype html><html><head><meta charset="utf-8"><style>html,body{margin:0;background:#000}canvas{display:block}</style>
+<script type="importmap">{"imports":{"three":"/node_modules/three/build/three.module.js","three/addons/":"/node_modules/three/examples/jsm/"}}</script></head>
+<body><script type="module">
+import * as THREE from 'three';
+import { buildWorld } from './lib/world3d.js';
+import { buildTrainer } from './lib/aircraft.js';
+const q = new URLSearchParams(location.search);
+const W = 1080, H = 1920;
+const r = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+r.setSize(W, H); r.setPixelRatio(1); document.body.appendChild(r.domElement);
+const world = buildWorld(r, { look: q.get('look') || 'golden' });
+const plane = buildTrainer(); world.scene.add(plane.group);
+const cam = new THREE.PerspectiveCamera(+q.get('fov') || 38, W / H, 0.5, 6000);
+window.seek = t => {
+  const P = new THREE.Vector3(0, 150, 0);
+  plane.group.position.copy(P).add(new THREE.Vector3(0, Math.sin(t * 1.1) * 0.15, 0));
+  plane.group.rotation.set(-0.10 + Math.sin(t * 0.9) * 0.02, +q.get('yaw') || 0.0, 0.03);
+  plane.set(t);
+  const off = new THREE.Vector3(+q.get('cx') || 13, +q.get('cy') || -1.2, +q.get('cz') || 17);
+  cam.position.copy(P).add(off); cam.lookAt(P.clone().add(new THREE.Vector3(+q.get('lx') || -1.5, +q.get('ly') || -1.5, 0)));
+  world.update(t, P);
+  r.render(world.scene, cam);
+};
+window.seek(0); window.READY = true;
+</script></body></html>

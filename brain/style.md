@@ -7,7 +7,7 @@
 - **Rounded everything.** Corners, wing tips, clouds, buttons. Nothing sharp except warnings.
 - **Soft, warm depth.** Parallax layers, atmospheric haze toward the horizon, soft drop shadows under floating things. No hard black shadows.
 - **Simple.** If a shape doesn't help the idea, delete it. One focal subject per moment.
-- **Friendly, adult-appropriate.** A cartoon a pilot isn't embarrassed to share: no goofy faces on objects, no baby-ish proportions on instruments. Instruments are drawn accurately.
+- **Made for a 35-year-old audience** (wholesome, every-age, never babyish): no faces on aircraft or objects, real aircraft proportions (stylised, not toy-like), grown-up palettes. **Friendly, adult-appropriate.** A cartoon a pilot isn't embarrassed to share: no goofy faces on objects, no baby-ish proportions on instruments. Instruments are drawn accurately.
 
 ## Palettes (in `engine/lib/draw.js` → `D.PAL`)
 | Palette | When |

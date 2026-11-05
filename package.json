@@ -5,6 +5,7 @@
   "description": "35–45 second aviation lessons for Instagram, made in code",
   "type": "module",
   "dependencies": {
-    "playwright": "1.63.0"
+    "playwright": "^1.63.0",
+    "three": "^0.170.0"
   }
 }
