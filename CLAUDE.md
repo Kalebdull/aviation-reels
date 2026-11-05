@@ -1,6 +1,6 @@
 # Aviation Reels
 
-30-second Instagram Reels that make aviation knowledge simple, made entirely in code in a modern, flowy cartoon style.
+35–45 second Instagram Reels that make aviation knowledge simple, made entirely in code in a modern, flowy cartoon style.
 
 **When Kaleb gives a topic (or uploads a CapCut voice export), use the `aviation-reel` skill** (`.claude/skills/aviation-reel/SKILL.md`). It walks through research → script approval → voice → build → render → critique → deliver.
 

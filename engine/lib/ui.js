@@ -23,17 +23,17 @@
     const segs = timing.segments;
     // exactly one caption on screen: the latest line that has started. The outgoing one is gone before the next lands.
     let cur = -1;
-    for (let i = 0; i < segs.length; i++) if (t >= segs[i].t0 - 0.04) cur = i;
+    for (let i = 0; i < segs.length; i++) if (i === 0 || t >= segs[i].t0 - 0.04) cur = i;
     for (let i = Math.max(0, cur); i <= cur; i++) {
       const s = segs[i], next = segs[i + 1];
       const cap = s.caption != null ? s.caption : s.text;
       if (!cap) continue;
-      const tIn = s.t0 - 0.04, tOut = next ? Math.min(next.t0 - 0.2, s.t1 + 0.6) : s.t1 + 0.9;
+      const tIn = i === 0 ? -1 : s.t0 - 0.04, tOut = next ? Math.min(next.t0 - 0.2, s.t1 + 0.6) : s.t1 + 0.9;
       if (t > tOut + 0.3) continue;
       const a = M.clamp(M.spring(t - tIn, 'snappy'), 0, 1) * (1 - M.clamp(M.spring(t - tOut, 'snappy'), 0, 1));
       if (a < 0.002) continue;
       const toks = parse(cap);
-      const size = o.size || 60, maxW = o.maxW || 860;
+      const size = o.size || 60, maxW = o.maxW || 760;   // 160–920: clear of the right action rail
       const lines = D.balance(g, toks.map(k => k.w), maxW, size, 800, 3);
       const lh = size * 1.22, padX = 36, padY = 22;
       const widths = lines.map(l => D.measure(g, l.join(' '), size, 800));
@@ -105,5 +105,21 @@
     g.restore();
   }
 
-  window.UI = { SAFE, parse, captions, slam, label, header };
+  /** Speech bubble that pops from its tail point (x,y). p = 0..1 (use T.in). side: 'left' tail on the left, 'right'. */
+  function bubble(g, str, x, y, p, o = {}) {
+    if (p <= 0.002) return;
+    const size = o.size || 46, padX = 34, h = size * 1.9, side = o.side || 'left';
+    const w = D.measure(g, str, size, 800) + padX * 2;
+    const bx = side === 'left' ? x + 30 : x - 30 - w, by = y - h - 34;
+    g.save(); g.translate(x, y); g.scale(M.clamp(p, 0, 1.1), M.clamp(p, 0, 1.1)); g.translate(-x, -y);
+    g.globalAlpha *= M.clamp(p * 2, 0, 1);
+    D.softShadow(g, 24, 10, 0.22);
+    D.rr(g, bx, by, w, h, h / 2); D.fill(g, o.bg || '#FFFFFF');
+    g.beginPath(); g.moveTo(x, y); g.lineTo(bx + (side === 'left' ? 34 : w - 34), by + h - 6); g.lineTo(bx + (side === 'left' ? 84 : w - 84), by + h - 6); g.closePath(); D.fill(g, o.bg || '#FFFFFF');
+    D.noShadow(g);
+    D.text(g, str, bx + w / 2, by + h / 2 + 2, { size, weight: 800, color: o.color || C.ink });
+    g.restore();
+  }
+
+  window.UI = { SAFE, parse, captions, slam, label, header, bubble };
 })();

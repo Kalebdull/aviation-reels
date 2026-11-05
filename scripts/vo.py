@@ -156,7 +156,7 @@ def main():
     ap.add_argument('episode')
     ap.add_argument('--in', dest='src')
     ap.add_argument('--estimate', action='store_true')
-    ap.add_argument('--wps', type=float, default=2.7, help='words per second for --estimate')
+    ap.add_argument('--wps', type=float, default=3.0, help='words per second for --estimate')
     a = ap.parse_args()
     ep = a.episode.rstrip('/')
     lines = read_lines(ep)
@@ -207,8 +207,10 @@ def main():
     for s in out['segments']:
         print(f"  {s['i']:>2}  {s['t0']:6.2f}–{s['t1']:6.2f}  {s['text']}")
     spoken = out['segments'][-1]['t1'] - out['segments'][0]['t0']
-    if spoken > 40:
-        print(f'!! spoken length {spoken:.1f}s is over the 30–40 s target. Tighten the script or split into parts.')
+    if out['duration'] > 45.5:
+        print(f'!! {out["duration"]:.1f}s is over the 45 s ceiling. Tighten the script or split into parts.')
+    elif out['duration'] < 34.5:
+        print(f'!  {out["duration"]:.1f}s is under the 35 s target. Room for one more beat.')
 
 
 if __name__ == '__main__':

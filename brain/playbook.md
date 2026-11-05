@@ -1,6 +1,6 @@
 # Playbook: what makes an Aviation Reels lesson work
 
-The series: **30-second Instagram Reels that make aviation knowledge simple.** One idea per reel, explained so a non-pilot follows it and a student pilot saves it.
+The series: **35–45 second Instagram Reels that make aviation knowledge simple.** One idea per reel, explained so a non-pilot follows it and a student pilot saves it.
 
 These rules come from posted results (see `lessons.md`). When a rule here and a lesson there disagree, the newer lesson wins. Update this file when that happens.
 
@@ -26,25 +26,28 @@ These rules come from posted results (see `lessons.md`). When a rule here and a 
 
 Rotate them. Note in `episodes.md` which one each reel used, so `lessons.md` can learn which ones work.
 
+## The pattern that got 62K views (holding patterns): copy its shape
+1. An everyday question → 2. name the thing → 3. three quick reasons as mini-scenes → 4. **one motif that builds** (draw it, add the timer, add the wind, stack it) → 5. a real number on screen → 6. "What should we break down next?" or a question.
+
 ## Script rules
-- **Length:** 70–85 words, about 30 seconds of CapCut text-to-speech. Hard ceiling of 40 s spoken. If the topic needs more, make it Part 1 / Part 2. Part 2s ride Part 1's wave, so post them close together.
+- **Length:** 35–45 seconds total. That's about 100–130 words of CapCut text-to-speech (it speaks about 3 words a second, plus the pauses between lines). Aim for about 40 s. Hard ceiling of 45 s. If the topic needs more, make it Part 1 / Part 2. Part 2s ride Part 1's wave, so post them close together.
 - **Shape:** super simple → complex. Start with what anyone recognises; end with what a student pilot would save.
 - **Voice:** a calm, plain-English instructor. FAA-accurate. Explain any jargon the moment it appears ("the pitot tube, a little scoop that faces the wind").
 - **One idea.** If you need "and also", cut it.
-- **Lines:** 6–10 spoken lines, one thought each, 1.5–4 s each. Every line gets its own visual beat.
+- **Lines:** 9–13 spoken lines, one thought each, 1.5–4 s each. Every line gets its own visual beat.
 - **Don't caption a spoken title.** If a line is just the topic name, mark it `| -` in `lines.txt`.
 - **Never read the gag.** On-screen jokes and keyword slams don't have to be spoken; the voice says only what makes sense spoken.
 - **Ending:** a loop plus an action. Either a question whose answer goes in the pinned comment ("Which way does the flag flip? Comment below"), or "Save this for your checkride." The last frame flows back into frame 0.
 - **Fact-check everything** against FAA sources (PHAK, AIM, AFH, IFH, ACS) or a primary study. Put each claim and its source in `facts.md`. No source, no claim.
 
-## Structure of a 30-second reel (a starting point, not a cage)
+## Structure of a 40-second reel (a starting point, not a cage)
 | Time | Beat | What the viewer gets |
 |---|---|---|
 | 0–2 s | **Hook** | Frame 0 already shows the payoff composition, in motion. Hook spoken in the first second. |
-| 2–8 s | **The familiar thing** | The everyday analogy, drawn simply. |
-| 8–20 s | **The mechanism** | The camera dives into how it works. Something new every 1.5–3 s. |
-| 20–26 s | **The payoff** | The key fact, on the biggest visual reveal. |
-| 26–30 s | **Loop + action** | A question or "save this", then a flow back to frame 0. |
+| 2–10 s | **The familiar thing** | The everyday analogy, drawn simply. |
+| 10–28 s | **The mechanism** | The camera dives into how it works. Something new every 1.5–3 s. |
+| 28–36 s | **The payoff** | The key fact, on the biggest visual reveal. |
+| 36–42 s | **Loop + action** | A question or "save this", then a flow back to frame 0. |
 
 ## Never
 - A static title card at the start. Ep 9 did it and 63.6% of viewers skipped.

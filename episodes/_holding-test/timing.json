@@ -1,0 +1,250 @@
+{
+ "duration": 15.197,
+ "source": "estimate",
+ "segments": [
+  {
+   "i": 0,
+   "t0": 0.25,
+   "t1": 2.25,
+   "text": "Why do planes fly in circles?",
+   "words": [
+    {
+     "w": "Why",
+     "t0": 0.25,
+     "t1": 0.5
+    },
+    {
+     "w": "do",
+     "t0": 0.5,
+     "t1": 0.75
+    },
+    {
+     "w": "planes",
+     "t0": 0.75,
+     "t1": 1.25
+    },
+    {
+     "w": "fly",
+     "t0": 1.25,
+     "t1": 1.5
+    },
+    {
+     "w": "in",
+     "t0": 1.5,
+     "t1": 1.75
+    },
+    {
+     "w": "circles?",
+     "t0": 1.75,
+     "t1": 2.25
+    }
+   ],
+   "caption": "Why do planes fly in *circles?*"
+  },
+  {
+   "i": 1,
+   "t0": 2.63,
+   "t1": 4.297,
+   "text": "It's called a holding pattern.",
+   "words": [
+    {
+     "w": "It's",
+     "t0": 2.63,
+     "t1": 2.838
+    },
+    {
+     "w": "called",
+     "t0": 2.838,
+     "t1": 3.255
+    },
+    {
+     "w": "a",
+     "t0": 3.255,
+     "t1": 3.463
+    },
+    {
+     "w": "holding",
+     "t0": 3.463,
+     "t1": 3.88
+    },
+    {
+     "w": "pattern.",
+     "t0": 3.88,
+     "t1": 4.297
+    }
+   ],
+   "caption": "It's called a *holding pattern.*"
+  },
+  {
+   "i": 2,
+   "t0": 4.677,
+   "t1": 6.677,
+   "text": "When the airport is too busy,",
+   "words": [
+    {
+     "w": "When",
+     "t0": 4.677,
+     "t1": 4.927
+    },
+    {
+     "w": "the",
+     "t0": 4.927,
+     "t1": 5.177
+    },
+    {
+     "w": "airport",
+     "t0": 5.177,
+     "t1": 5.677
+    },
+    {
+     "w": "is",
+     "t0": 5.677,
+     "t1": 5.927
+    },
+    {
+     "w": "too",
+     "t0": 5.927,
+     "t1": 6.177
+    },
+    {
+     "w": "busy,",
+     "t0": 6.177,
+     "t1": 6.677
+    }
+   ],
+   "caption": "When the airport is too *busy,*"
+  },
+  {
+   "i": 3,
+   "t0": 7.057,
+   "t1": 9.057,
+   "text": "or the weather is too bad,",
+   "words": [
+    {
+     "w": "or",
+     "t0": 7.057,
+     "t1": 7.342
+    },
+    {
+     "w": "the",
+     "t0": 7.342,
+     "t1": 7.628
+    },
+    {
+     "w": "weather",
+     "t0": 7.628,
+     "t1": 8.2
+    },
+    {
+     "w": "is",
+     "t0": 8.2,
+     "t1": 8.485
+    },
+    {
+     "w": "too",
+     "t0": 8.485,
+     "t1": 8.771
+    },
+    {
+     "w": "bad,",
+     "t0": 8.771,
+     "t1": 9.057
+    }
+   ],
+   "caption": "or the weather is too *bad,*"
+  },
+  {
+   "i": 4,
+   "t0": 9.437,
+   "t1": 11.77,
+   "text": "air traffic control asks pilots to wait.",
+   "words": [
+    {
+     "w": "air",
+     "t0": 9.437,
+     "t1": 9.67
+    },
+    {
+     "w": "traffic",
+     "t0": 9.67,
+     "t1": 10.137
+    },
+    {
+     "w": "control",
+     "t0": 10.137,
+     "t1": 10.603
+    },
+    {
+     "w": "asks",
+     "t0": 10.603,
+     "t1": 10.837
+    },
+    {
+     "w": "pilots",
+     "t0": 10.837,
+     "t1": 11.303
+    },
+    {
+     "w": "to",
+     "t0": 11.303,
+     "t1": 11.537
+    },
+    {
+     "w": "wait.",
+     "t0": 11.537,
+     "t1": 11.77
+    }
+   ],
+   "caption": "air traffic control asks pilots to *wait.*"
+  },
+  {
+   "i": 5,
+   "t0": 12.15,
+   "t1": 14.817,
+   "text": "So they fly a racetrack in the sky.",
+   "words": [
+    {
+     "w": "So",
+     "t0": 12.15,
+     "t1": 12.417
+    },
+    {
+     "w": "they",
+     "t0": 12.417,
+     "t1": 12.683
+    },
+    {
+     "w": "fly",
+     "t0": 12.683,
+     "t1": 12.95
+    },
+    {
+     "w": "a",
+     "t0": 12.95,
+     "t1": 13.217
+    },
+    {
+     "w": "racetrack",
+     "t0": 13.217,
+     "t1": 14.017
+    },
+    {
+     "w": "in",
+     "t0": 14.017,
+     "t1": 14.283
+    },
+    {
+     "w": "the",
+     "t0": 14.283,
+     "t1": 14.55
+    },
+    {
+     "w": "sky.",
+     "t0": 14.55,
+     "t1": 14.817
+    }
+   ],
+   "caption": "So they fly a *racetrack* in the sky."
+  }
+ ]
+}

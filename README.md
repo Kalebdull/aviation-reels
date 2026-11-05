@@ -1,6 +1,6 @@
 # Aviation Reels
 
-30-second aviation lessons for Instagram, made in code: research, script, CapCut voice, animation, sound and delivery. The brain lives in `brain/`, the engine in `engine/`, and each reel in `episodes/`.
+35–45 second aviation lessons for Instagram, made in code: research, script, CapCut voice, animation, sound and delivery. The brain lives in `brain/`, the engine in `engine/`, and each reel in `episodes/`.
 
 ## How to make a reel
 1. In Claude Code (in this repo), type a topic: **"New reel: why the TO/FROM flag ignores your heading"**.

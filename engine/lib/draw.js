@@ -92,7 +92,8 @@
     const lineW = (a, b) => wd.slice(a, b).reduce((s, v) => s + v, 0) + sp * (b - a - 1);
     let best = null;
     function rec(start, lines, acc) {
-      if (start === n) { const m = Math.max(...acc.map(([a, b]) => lineW(a, b))); if (m <= maxW && (!best || m < best.m - 0.5 || (Math.abs(m - best.m) < 0.5 && acc.length < best.l.length))) best = { m, l: acc.slice() }; return; }
+      // fewest lines first, then the most even widths
+      if (start === n) { const m = Math.max(...acc.map(([a, b]) => lineW(a, b))); if (m <= maxW && (!best || acc.length < best.l.length || (acc.length === best.l.length && m < best.m - 0.5))) best = { m, l: acc.slice() }; return; }
       if (lines === maxLines) return;
       for (let e = start + 1; e <= n; e++) { if (lineW(start, e) > maxW) break; acc.push([start, e]); rec(e, lines + 1, acc); acc.pop(); }
     }

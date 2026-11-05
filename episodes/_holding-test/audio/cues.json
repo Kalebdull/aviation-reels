@@ -1,0 +1,40 @@
+{
+ "duration": 16.017,
+ "cues": [
+  {
+   "t": 3.463,
+   "type": "chime",
+   "gain": 0.7
+  },
+  {
+   "t": 4.477,
+   "type": "whoosh",
+   "gain": 0.55
+  },
+  {
+   "t": 6.177,
+   "type": "blip",
+   "gain": 0.6
+  },
+  {
+   "t": 8.771,
+   "type": "pop",
+   "gain": 0.8
+  },
+  {
+   "t": 11.487,
+   "type": "blip",
+   "gain": 0.7
+  },
+  {
+   "t": 11.95,
+   "type": "whoosh",
+   "gain": 0.55
+  },
+  {
+   "t": 13.217,
+   "type": "chime",
+   "gain": 0.8
+  }
+ ]
+}

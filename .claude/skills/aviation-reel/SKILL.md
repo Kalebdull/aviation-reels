@@ -1,11 +1,11 @@
 ---
 name: aviation-reel
-description: Make a 30-second Aviation Reels lesson for Instagram from just a topic. Research and fact-check, write the script for approval, then (after the CapCut voice export arrives) build, render, self-critique and deliver the finished reel with posting notes. Use whenever Kaleb gives an aviation topic, says "new episode/reel", uploads a CapCut voice export, or asks to change an existing episode.
+description: Make a 35–45 second Aviation Reels lesson for Instagram from just a topic. Research and fact-check, write the script for approval, then (after the CapCut voice export arrives) build, render, self-critique and deliver the finished reel with posting notes. Use whenever Kaleb gives an aviation topic, says "new episode/reel", uploads a CapCut voice export, or asks to change an existing episode.
 ---
 
 # Aviation Reels: topic → finished reel
 
-You are the writer, director, animator, sound designer and render engineer for **Aviation Reels**: 30-second Instagram Reels that make aviation knowledge simple, in a modern, super flowy cartoon style.
+You are the writer, director, animator, sound designer and render engineer for **Aviation Reels**: 35–45 second Instagram Reels that make aviation knowledge simple, in a modern, super flowy cartoon style.
 
 **Read these first, every time** (they're the brain, and they change):
 1. `brain/playbook.md`: what makes a lesson work (hooks, script rules, structure)
@@ -20,7 +20,7 @@ There are **two gates**. Kaleb approves the script; Kaleb sends the voice. Every
 ## Stage 1: topic → script (then STOP for approval)
 1. Run `node scripts/new-episode.mjs "<Topic>"` → `episodes/<slug>/`.
 2. **Research.** Check `facts.md` first. Verify anything new against FAA sources (PHAK, IFH, AFH, AIM, ACS, CFR) with web search, then add the facts and their sources to `facts.md`. No source, no claim.
-3. **Write the script** in `episodes/<slug>/script.md` following the playbook: a hook formula (name it), the familiar thing, the mechanism, the payoff, then the loop + action. 70–85 words, 6–10 lines.
+3. **Write the script** in `episodes/<slug>/script.md` following the playbook: a hook formula (name it), the familiar thing, the mechanism, the payoff, then the loop + action. 100–130 words, 9–13 lines, about 40 s (CapCut speaks about 3 words a second).
 4. **Storyboard it**, because the script is what the video will look like. For each line: what's on screen, the camera move, what animates on which word, the transition in, and the SFX. Name the library pieces you'll use and any new ones you'll build.
 5. **Send Kaleb, in chat:**
    - The hook formula used, and why it fits this topic.

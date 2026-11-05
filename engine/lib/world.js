@@ -62,15 +62,16 @@
   /** A puffy flat cloud centred at (x,y), width w. seed shapes it. */
   function cloud(g, pal, x, y, w, seed = 1, o = {}) {
     const n = 4 + Math.floor(M.hash01(seed, 0) * 3), puffs = [];
+    // puffy: big round middle puffs, smaller ones toward the ends, all sitting on a flat base
     for (let i = 0; i < n; i++) {
-      const u = i / (n - 1), r = w * (0.16 + 0.13 * Math.sin(u * Math.PI) + 0.05 * M.hash01(seed, i + 1));
-      puffs.push([x - w / 2 + w * (0.12 + 0.76 * u), y - r * 0.55 - w * 0.04 * Math.sin(u * Math.PI), r]);
+      const u = i / (n - 1), r = w * (0.11 + 0.15 * Math.sin(u * Math.PI) + 0.04 * M.hash01(seed, i + 1));
+      puffs.push([x - w / 2 + w * (0.16 + 0.68 * u), y - r * 0.62 - w * 0.07 * Math.sin(u * Math.PI), r]);
     }
+    if (n > 4) puffs.push([x + w * (M.hash01(seed, 9) - 0.5) * 0.2, y - w * 0.3, w * 0.17]);
     const base = y + w * 0.06;
     const shape = (dy) => {
-      g.beginPath();
+      D.rr(g, x - w * 0.46, base - w * 0.12 + dy, w * 0.92, w * 0.12, w * 0.06);   // rr starts the path: draw it first
       puffs.forEach(([px, py, r]) => { g.moveTo(px + r, py + dy); g.arc(px, py + dy, r, 0, Math.PI * 2); });
-      D.rr(g, x - w * 0.46, base - w * 0.12 + dy, w * 0.92, w * 0.12, w * 0.06);
     };
     g.save();
     if (o.alpha != null) g.globalAlpha *= o.alpha;
@@ -128,8 +129,8 @@
     sky(g, pal, cam);
     stars(g, pal, t, cam);
     if (o.sun !== false) sun(g, pal, cam, o.sunAt || {});
-    cloudField(g, pal, t, cam, 0.1, { y: -900, count: 3, w: 300, drift: 6, seed: 2, alpha: 0.75 });
-    cloudField(g, pal, t, cam, 0.22, { y: -650, count: 3, w: 420, drift: 10, seed: 4 });
+    cloudField(g, pal, t, cam, 0.1, { y: -980, count: 2, w: 190, drift: 6, seed: 2, alpha: 0.7 });
+    cloudField(g, pal, t, cam, 0.22, { y: -720, count: 2, w: 270, drift: 10, seed: 4, alpha: 0.92 });
     if (o.hills !== false) {
       hills(g, pal, cam, 0.3, pal.hills[0], { amp: 110, base: 60, seed: 1.3 });
       hills(g, pal, cam, 0.45, pal.hills[1], { amp: 95, base: 150, seed: 2.7, trees: true, treeSpacing: 160 });

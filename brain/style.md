@@ -32,7 +32,7 @@ Never use coral for anything good or teal for anything bad. Viewers learn the co
 
 ## Type
 - **Inter**, bundled in `assets/fonts/`. ExtraBold (800) for captions and pills, Black (900) for big slams.
-- Captions: 60 px, white on a 55% navy pill, centred at y≈1350, balanced wrap at 860 px, max 3 lines. Karaoke: the spoken word turns amber; `*emphasis*` words stay amber.
+- Captions: 60 px, white on a 55% navy pill, centred at y≈1350, wrapped at 760 px (fewest lines, then balanced), max 3 lines. Karaoke: the spoken word turns amber; `*emphasis*` words stay amber.
 - Nothing on screen smaller than 30 px (phones), except gauge numerals, which follow real instrument proportions.
 
 ## Motion (the "flowy" part)
