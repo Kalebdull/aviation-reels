@@ -126,12 +126,15 @@ export default async function ({ THREE, scene, camera, world, load, props, T }) 
     } else {
       const k = T.cam(t, camKeys);
       let pos = k.pos, look = k.look;
-      if (t < tAir - 0.3) {                                              // hero chase: our RV-7 big in frame, the city ahead
+      if (t < tGated - 0.35) {                                           // hero chase: our RV-7 big in frame, then the bubble ahead of it
         const r = rvOpen(t), w = M.clamp((t - (tBubble - 0.9)) / 1.3, 0, 1), e = w * w * (3 - 2 * w);
         // hero 3/4 shot from behind and above the left wing, the city and the bubble ahead of the nose
         const HO = [-125, 30, 72, 28, -22, -22];             // framed by measuring the RV-7 on screen: big, above the caption
         const hero = r.clone().add(new THREE.Vector3(HO[0], HO[1], HO[2])), heroLook = r.clone().add(new THREE.Vector3(HO[3], HO[4], HO[5]));
-        const reveal = r.clone().add(new THREE.Vector3(-420, 150, 260)), revealLook = new THREE.Vector3(-300, 260, -30);
+        // reveal: rise up behind the RV-7, on the line from the plane to the airport, so the plane stays in the
+        // foreground flying toward the bubble (lower third), the whole bubble ahead of it
+        const target = new THREE.Vector3(-150, 200, -40), dir = r.clone().sub(target).normalize();
+        const reveal = r.clone().addScaledVector(dir, 300).add(new THREE.Vector3(0, -20, 0)), revealLook = target.clone().add(new THREE.Vector3(0, -200, 0));
         pos = hero.lerp(reveal, e); look = heroLook.lerp(revealLook, e);
       }
       if (t > tUnder - 2.2 && t < tWin) {                                // ride alongside the RV-7, looking up at the shelf
