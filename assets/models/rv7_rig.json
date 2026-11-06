@@ -1,0 +1,73 @@
+{
+ "units": "metres",
+ "up": "+Z (Blender) / +Y (glTF)",
+ "nose": "-X",
+ "left_wing": "+Y",
+ "parts": [
+  {
+   "node": "Prop",
+   "axis": "X",
+   "min_deg": -1000000000.0,
+   "max_deg": 1000000000.0,
+   "note": "spins about X; ~2,400 rpm at cruise (animate 40 rad/s for a soft blur)"
+  },
+  {
+   "node": "Flap_L",
+   "axis": "Y",
+   "min_deg": -40,
+   "max_deg": 0,
+   "note": "flap L: rotate about local Y; + = trailing edge up; flaps deflect down (negative), 0..-40"
+  },
+  {
+   "node": "Aileron_L",
+   "axis": "Y",
+   "min_deg": -25,
+   "max_deg": 25,
+   "note": "aileron L: rotate about local Y; + = trailing edge up"
+  },
+  {
+   "node": "Flap_R",
+   "axis": "Y",
+   "min_deg": -40,
+   "max_deg": 0,
+   "note": "flap R: rotate about local Y; + = trailing edge up; flaps deflect down (negative), 0..-40"
+  },
+  {
+   "node": "Aileron_R",
+   "axis": "Y",
+   "min_deg": -25,
+   "max_deg": 25,
+   "note": "aileron R: rotate about local Y; + = trailing edge up"
+  },
+  {
+   "node": "Elevator",
+   "axis": "Y",
+   "min_deg": -25,
+   "max_deg": 20,
+   "note": "elevator: + = trailing edge up (stick back)"
+  },
+  {
+   "node": "TrimTab",
+   "axis": "Y",
+   "min_deg": -15,
+   "max_deg": 15,
+   "note": "elevator trim tab (left elevator), + = tab trailing edge up"
+  },
+  {
+   "node": "Rudder",
+   "axis": "Z",
+   "min_deg": -30,
+   "max_deg": 30,
+   "note": "rudder: rotate about local Z; + = trailing edge left (+Y)"
+  },
+  {
+   "node": "TailWheel",
+   "axis": "Z",
+   "min_deg": -30,
+   "max_deg": 30,
+   "note": "tailwheel steering, + = left; follows the rudder on the ground"
+  }
+ ],
+ "ground_attitude_deg": 11.5,
+ "main_wheel_bottom_z": -1.2
+}

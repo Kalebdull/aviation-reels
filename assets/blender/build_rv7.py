@@ -1,352 +1,528 @@
-"""build_rv7.py — the show's airplane: an RV-7 taildragger in polished aluminium with one accent colour.
+"""build_rv7.py (v2): the show's airplane, an RV-7 taildragger in soft satin paint with working control surfaces.
 
 Run headless (here or on the Mac):   blender -b -P assets/blender/build_rv7.py -- --preview
-or with the bpy module:              python3 assets/blender/build_rv7.py --preview
+or with the bpy module:              python3 assets/blender/build_rv7.py --preview [--shot=studio_front34] [--pose=controls]
 
-Writes  assets/models/rv7.blend   (open it in Blender to look around and tweak)
-        assets/models/rv7.glb     (for the real-time engine)
-        assets/models/rv7_preview_*.png  (with --preview: Cycles stills, golden hour)
+Writes  assets/models/rv7.blend          open it in Blender to look around and tweak
+        assets/models/rv7.glb            for the real-time engine (named, animatable nodes)
+        assets/models/rv7_rig.json       every moving part: node name, hinge axis, travel limits
+        assets/models/rv7_*.png          with --preview: studio turnaround + golden-hour beauty shot (Cycles)
 
-Coordinates: metres, nose → +X, up → +Z, left wing → +Y. Modelled in level flight; ground attitude is a rotation.
-Proportions: span 7.62 m (25 ft), length ≈ 6.2 m, wing chord 1.47 m, dihedral 3.5°.
-The model is smooth (subdivision surfaces): the look is "Pixar short", not toy and not CAD.
+Livery: change BODY / TRIM / ACCENT below (or --body=#hex --trim=#hex --accent=#hex) and re-run.
+
+Coordinates: metres. Fuselage station x runs from the nose (≈0) to the tail (≈6.2), so the nose points −X.
+Up is +Z, the LEFT wing is +Y. Modelled in level flight; `--pose=ground` sits it in the 3-point attitude.
+Proportions follow the RV-7: span 7.62 m (25 ft), length ≈ 6.2 m, wing chord 1.47 m, dihedral 3.5°, prop 1.83 m.
+
+Control-surface sign convention (rotation of the moving part about its hinge, degrees):
+  aileron/elevator/trim/flap: + = trailing edge UP          rudder: + = trailing edge LEFT (+Y)
+  tailwheel: + = steer left        prop: spins about X
 """
-import math, os, sys
+import json, math, os, sys
 import bpy, bmesh
-from mathutils import Vector, Matrix
+from mathutils import Vector, Matrix, Euler
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
 OUT = os.path.join(ROOT, 'assets', 'models')
 ARGS = sys.argv[sys.argv.index('--') + 1:] if '--' in sys.argv else sys.argv[1:]
-# Livery: one soft body colour + a lighter trim + one accent. Change here (or --body= --trim= --accent=) and re-run.
-BODY, TRIM, ACCENT = '#8FB3D9', '#F6F1E7', '#E8836A'
-for a in ARGS:
-    if a.startswith('--body='): BODY = a.split('=', 1)[1]
-    if a.startswith('--trim='): TRIM = a.split('=', 1)[1]
-    if a.startswith('--accent='): ACCENT = a.split('=', 1)[1]
-TAG = next((a.split('=', 1)[1] for a in ARGS if a.startswith('--tag=')), '')
+arg = lambda k, d=None: next((a.split('=', 1)[1] for a in ARGS if a.startswith(f'--{k}=')), d)
+
+# ---- livery: one soft body colour, a white trim swoosh, one navy accent ----
+BODY = arg('body', '#1F4FC4')      # deep satin blue: top of the fuselage, tail, spinner
+TRIM = arg('trim', '#F7F8FA')      # white: belly, wings, stab, gear, wheel pants
+ACCENT = arg('accent', '#15171C')  # black: the swoosh between blue and white, canopy frame
+TAG = arg('tag', '')
+
+DIH = math.radians(3.5)
 
 
-# ---------------------------------------------------------------- helpers
-def hex_rgb(h):
-    h = h.lstrip('#')
-    srgb = [int(h[i:i + 2], 16) / 255 for i in (0, 2, 4)]
-    return [(c / 12.92 if c <= 0.04045 else ((c + 0.055) / 1.055) ** 2.4) for c in srgb] + [1]
+# ================================================================ helpers
+def lin(h):
+    h = h.lstrip('#'); c = [int(h[i:i + 2], 16) / 255 for i in (0, 2, 4)]
+    return [(v / 12.92 if v <= 0.04045 else ((v + 0.055) / 1.055) ** 2.4) for v in c] + [1]
 
 
-def material(name, color, metallic=0.0, rough=0.4, coat=0.0, transmission=0.0, ior=1.45, aniso=0.0, alpha=1.0):
-    m = bpy.data.materials.new(name)
-    m.use_nodes = True
+def material(name, color, rough=0.4, metallic=0.0, coat=0.0, transmission=0.0, ior=1.45, emission=None, estr=0.0):
+    m = bpy.data.materials.new(name); m.use_nodes = True
     b = m.node_tree.nodes['Principled BSDF']
-    b.inputs['Base Color'].default_value = hex_rgb(color) if isinstance(color, str) else color
-    b.inputs['Metallic'].default_value = metallic
-    b.inputs['Roughness'].default_value = rough
-    for key, val in (('Coat Weight', coat), ('Transmission Weight', transmission), ('IOR', ior), ('Anisotropic', aniso), ('Alpha', alpha)):
-        if key in b.inputs:
-            b.inputs[key].default_value = val
+    b.inputs['Base Color'].default_value = lin(color) if isinstance(color, str) else color
+    b.inputs['Roughness'].default_value = rough; b.inputs['Metallic'].default_value = metallic
+    for k, v in (('Coat Weight', coat), ('Coat Roughness', 0.25), ('Transmission Weight', transmission), ('IOR', ior)):
+        if k in b.inputs: b.inputs[k].default_value = v
+    if emission and 'Emission Color' in b.inputs:
+        b.inputs['Emission Color'].default_value = lin(emission); b.inputs['Emission Strength'].default_value = estr
     return m
 
 
-def mesh_object(name, bm, mats=(), subsurf=2, smooth=True, parent=None):
-    me = bpy.data.meshes.new(name)
-    bm.to_mesh(me); bm.free()
-    ob = bpy.data.objects.new(name, me)
-    bpy.context.collection.objects.link(ob)
-    for m in mats:
-        me.materials.append(m)
+def new_obj(name, bm, mats, sub=2, smooth=True, parent=None, loc=(0, 0, 0), rot=(0, 0, 0), solidify=0.0):
+    me = bpy.data.meshes.new(name); bm.to_mesh(me); bm.free()
+    o = bpy.data.objects.new(name, me); bpy.context.collection.objects.link(o)
+    for m in (mats if isinstance(mats, (list, tuple)) else [mats]): me.materials.append(m)
     if smooth:
-        for p in me.polygons:
-            p.use_smooth = True
-    if subsurf:
-        mod = ob.modifiers.new('Subsurf', 'SUBSURF'); mod.levels = 1; mod.render_levels = subsurf
-    if parent:
-        ob.parent = parent
-    return ob
+        for p in me.polygons: p.use_smooth = True
+    if solidify:
+        s = o.modifiers.new('Shell', 'SOLIDIFY'); s.thickness = solidify; s.offset = 0
+    if sub:
+        md = o.modifiers.new('Subsurf', 'SUBSURF'); md.levels = 1; md.render_levels = sub
+    o.parent = parent; o.location = loc; o.rotation_euler = rot
+    return o
 
 
-def loft(rings, cap_start=True, cap_end=True, mat_of=None):
-    """rings: list of closed loops (same vertex count). mat_of(i, j) → material index for the quad at ring i, vertex j."""
+def empty(name, parent=None, loc=(0, 0, 0), rot=(0, 0, 0)):
+    e = bpy.data.objects.new(name, None); bpy.context.collection.objects.link(e)
+    e.empty_display_size = 0.15; e.parent = parent; e.location = loc; e.rotation_euler = rot
+    return e
+
+
+def loft(rings, closed=True, cap_start=False, cap_end=False, mat_of=None):
     bm = bmesh.new()
     vs = [[bm.verts.new(p) for p in r] for r in rings]
-    n = len(rings[0])
+    n = len(rings[0]); m = n if closed else n - 1
     for i in range(len(rings) - 1):
-        for j in range(n):
+        for j in range(m):
             f = bm.faces.new((vs[i][j], vs[i][(j + 1) % n], vs[i + 1][(j + 1) % n], vs[i + 1][j]))
-            if mat_of:
-                f.material_index = mat_of(i, j)
+            if mat_of: f.material_index = mat_of(i, j)
     for k, cap in ((0, cap_start), (len(rings) - 1, cap_end)):
-        if cap:
+        if cap and closed:
             c = bm.verts.new(sum((Vector(p) for p in rings[k]), Vector()) / n)
             for j in range(n):
                 a, b = vs[k][j], vs[k][(j + 1) % n]
-                bm.faces.new((a, b, c) if k else (b, a, c))
+                f = bm.faces.new((a, b, c) if k else (b, a, c))
+                if mat_of: f.material_index = mat_of(min(k, len(rings) - 2), j)
     bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
     return bm
 
 
-def lerp_stations(st, x):
-    for i in range(len(st) - 1):
-        if st[i][0] <= x <= st[i + 1][0]:
-            u = (x - st[i][0]) / (st[i + 1][0] - st[i][0])
-            u = u * u * (3 - 2 * u) if 0 < i < len(st) - 2 else u
-            return [st[i][k] + (st[i + 1][k] - st[i][k]) * u for k in range(1, len(st[i]))]
-    return st[-1][1:] if x > st[-1][0] else st[0][1:]
+def prim(kind, **kw):
+    bm = bmesh.new()
+    if kind == 'sphere': bmesh.ops.create_uvsphere(bm, u_segments=kw.get('u', 32), v_segments=kw.get('v', 16), radius=kw.get('r', 1))
+    elif kind == 'cyl': bmesh.ops.create_cone(bm, cap_ends=True, segments=kw.get('seg', 24), radius1=kw['r1'], radius2=kw.get('r2', kw['r1']), depth=kw['d'])
+    elif kind == 'cube': bmesh.ops.create_cube(bm, size=1)
+    if 'scale' in kw: bmesh.ops.scale(bm, vec=kw['scale'], verts=bm.verts)
+    return bm
 
 
-# ---------------------------------------------------------------- scene
-def reset():
-    bpy.ops.wm.read_factory_settings(use_empty=True)
-    sc = bpy.context.scene
-    sc.unit_settings.system = 'METRIC'
-    return sc
+def tube(name, pts, r, m, parent):
+    """A smooth swept tube through points (canopy frames, rails)."""
+    cu = bpy.data.curves.new(name, 'CURVE'); cu.dimensions = '3D'; cu.bevel_depth = r; cu.bevel_resolution = 4; cu.use_fill_caps = True
+    sp = cu.splines.new('POLY'); sp.points.add(len(pts) - 1)
+    for p_, q in zip(sp.points, pts): p_.co = (q[0], q[1], q[2], 1)
+    o = bpy.data.objects.new(name, cu); bpy.context.collection.objects.link(o); cu.materials.append(m); o.parent = parent
+    return o
 
 
-# fuselage stations: x, half-width, top, bottom
+def rod(name, a, b, r0, r1, m, parent, sub=1):
+    a, b = Vector(a), Vector(b)
+    o = new_obj(name, prim('cyl', r1=r0, r2=r1, d=(b - a).length, seg=16), m, sub=sub, parent=parent, loc=(a + b) / 2)
+    o.rotation_euler = Vector((0, 0, 1)).rotation_difference(b - a).to_euler()
+    return o
+
+
+# ================================================================ airfoils (chord fraction u: 0 = LE, 1 = TE)
+def af(u, t, camber=0.018):
+    yt = 5 * t * (0.2969 * math.sqrt(max(u, 0)) - 0.126 * u - 0.3516 * u * u + 0.2843 * u ** 3 - 0.1036 * u ** 4)
+    yc = camber * math.sin(math.pi * u) * (1 - 0.3 * u)
+    return yc + yt, yc - yt, yc
+
+
+def cos_space(a, b, n):
+    return [a + (b - a) * (1 - math.cos(math.pi * i / n)) / 2 for i in range(n + 1)]
+
+
+def loop(u0, u1, t, n=14, camber=0.018):
+    """Closed section between chord fractions u0..u1: upper surface u1→u0, then lower u0→u1. Points are (u, z/c)."""
+    us = cos_space(u0, u1, n)
+    up = [(u, af(u, t, camber)[0]) for u in reversed(us)]
+    lo = [(u, af(u, t, camber)[1]) for u in us[1:-1]] if u0 == 0 else [(u, af(u, t, camber)[1]) for u in us]
+    if u0 == 0:
+        return up + lo + [(us[-1], af(us[-1], t, camber)[1])]
+    return up + lo
+
+
+# ================================================================ fuselage
+# station x, half-width, top, bottom  (RV-7: deep cabin, short cowl, slim tailcone)
 FUSE = [
-    (0.22, 0.29, 0.22, -0.30), (0.45, 0.42, 0.32, -0.40), (0.85, 0.52, 0.40, -0.45), (1.25, 0.565, 0.45, -0.46),
-    (1.70, 0.585, 0.48, -0.45), (2.40, 0.59, 0.50, -0.42), (3.00, 0.55, 0.58, -0.36), (3.80, 0.40, 0.50, -0.18),
-    (4.75, 0.25, 0.40, -0.02), (5.60, 0.12, 0.34, 0.08), (5.95, 0.035, 0.32, 0.12),
+    (0.20, 0.28, 0.21, -0.29), (0.42, 0.41, 0.31, -0.40), (0.80, 0.51, 0.39, -0.45), (1.22, 0.56, 0.44, -0.46),
+    (1.70, 0.585, 0.47, -0.45), (2.40, 0.59, 0.49, -0.42), (3.00, 0.55, 0.57, -0.36), (3.80, 0.40, 0.50, -0.18),
+    (4.75, 0.25, 0.41, -0.02), (5.60, 0.12, 0.35, 0.08), (6.02, 0.035, 0.33, 0.13),
 ]
 
 
-def section(x, n=48, k=2.9):
-    hw, top, bot = lerp_stations(FUSE, x)
-    mid, hh = (top + bot) / 2, (top - bot) / 2
-    pts = []
+def fstation(x):
+    for i in range(len(FUSE) - 1):
+        if FUSE[i][0] <= x <= FUSE[i + 1][0]:
+            u = (x - FUSE[i][0]) / (FUSE[i + 1][0] - FUSE[i][0]); u = u * u * (3 - 2 * u)
+            return [FUSE[i][k] + (FUSE[i + 1][k] - FUSE[i][k]) * u for k in (1, 2, 3)]
+    return list(FUSE[-1][1:]) if x > FUSE[-1][0] else list(FUSE[0][1:])
+
+
+def fsection(x, n=56, k=2.8):
+    hw, top, bot = fstation(x); mid, hh = (top + bot) / 2, (top - bot) / 2
+    out = []
     for j in range(n):
-        th = 2 * math.pi * j / n
-        c, s = math.cos(th), math.sin(th)
-        y = math.copysign(abs(c) ** (2 / k), c) * hw
-        z = mid + math.copysign(abs(s) ** (2 / k), s) * hh
-        pts.append((x, y, z))
-    return pts
+        th = 2 * math.pi * j / n; c, s = math.cos(th), math.sin(th)
+        out.append((x, math.copysign(abs(c) ** (2 / k), c) * hw, mid + math.copysign(abs(s) ** (2 / k), s) * hh))
+    return out
 
 
-def build(sc):
-    # soft satin paint: easy on the eye, reads well small, looks the same in every light
-    alu = material('Body', BODY, rough=0.42, coat=0.5)
-    trim = material('Trim', TRIM, rough=0.4, coat=0.5)
-    accent = material('Accent', ACCENT, rough=0.38, coat=0.5)
-    glass = material('Canopy', (0.78, 0.86, 0.93, 1), rough=0.03, transmission=1.0, ior=1.03)   # thin-shell look: low IOR, no lensing
-    rubber = material('Rubber', '#1E2026', rough=0.7)
-    steel = material('Steel', '#6E7682', metallic=0.8, rough=0.35)
-    dark = material('Interior', '#2A2E36', rough=0.6)
-    seat = material('Seats', '#3B2E2A', rough=0.55)
+# ================================================================ livery painted in the shader (smooth curves, any mesh density)
+def livery_material():
+    m = bpy.data.materials.new('Livery'); m.use_nodes = True
+    N, L = m.node_tree.nodes, m.node_tree.links
+    b = N['Principled BSDF']; b.inputs['Roughness'].default_value = 0.42
+    if 'Coat Weight' in b.inputs: b.inputs['Coat Weight'].default_value = 0.55
+    tc = N.new('ShaderNodeTexCoord'); P = N.new('ShaderNodeSeparateXYZ'); L.new(tc.outputs['Object'], P.inputs[0])
+    Nn = N.new('ShaderNodeSeparateXYZ'); L.new(tc.outputs['Normal'], Nn.inputs[0])
+    def math(op, a, b=None, c=None):
+        n = N.new('ShaderNodeMath'); n.operation = op
+        for i, v in enumerate((a, b, c)):
+            if v is None: continue
+            if isinstance(v, (int, float)): n.inputs[i].default_value = v
+            else: L.new(v, n.inputs[i])
+        return n.outputs[0]
+    def band(v, lo, hi, soft=0.004):            # smooth 0..1 mask for lo < v < hi
+        a = math('SUBTRACT', v, lo); a = math('DIVIDE', a, soft); a = math('MINIMUM', math('MAXIMUM', a, 0.0), 1.0)
+        c = math('SUBTRACT', hi, v); c = math('DIVIDE', c, soft); c = math('MINIMUM', math('MAXIMUM', c, 0.0), 1.0)
+        return math('MULTIPLY', a, c)
+    x, z = P.outputs['X'], P.outputs['Z']
+    # split line: low at the cowl, rising gently under the canopy, up toward the tail (z = -0.29 + 0.075x)
+    # blue nose, then the line sweeps up through the middle of the side toward the tail (white below)
+    split = math('ADD', -0.17, math('MULTIPLY', x, 0.075))
+    split = math('SUBTRACT', split, math('MULTIPLY', math('MAXIMUM', math('SUBTRACT', 0.9, x), 0.0), 0.12))
+    dz = math('SUBTRACT', z, split)
+    blue = band(dz, 0.0, 9.0, 0.004)
+    pin = band(dz, -0.024, -0.008, 0.002)            # thin white line just under the blue
+    black = band(dz, -0.085, -0.024, 0.003)         # the bold black swoosh
+    def rgb(hexv):
+        n = N.new('ShaderNodeRGB'); n.outputs[0].default_value = lin(hexv); return n.outputs[0]
+    def mix(fac, a, b):
+        n = N.new('ShaderNodeMix'); n.data_type = 'RGBA'; L.new(fac, n.inputs['Factor']); L.new(a, n.inputs[6]); L.new(b, n.inputs[7]); return n.outputs[2]
+    c = mix(blue, rgb(TRIM), rgb(BODY)); c = mix(black, c, rgb(ACCENT))
+    L.new(c, b.inputs['Base Color'])
+    return m
 
-    root = bpy.data.objects.new('RV7', None); sc.collection.objects.link(root)
 
-    # fuselage: aluminium with an accent swoosh along each side and an accent cowl front
-    n, xs = 48, [0.22 + (5.95 - 0.22) * (i / 90) for i in range(91)]
-    rings = [section(x, n) for x in xs]
+# ================================================================ build
+def build():
+    bpy.ops.wm.read_factory_settings(use_empty=True)
+    sc = bpy.context.scene
+    M = {
+        'body': material('Paint_Body', BODY, rough=0.42, coat=0.55),
+        'trim': material('Paint_Trim', TRIM, rough=0.4, coat=0.55),
+        'accent': material('Paint_Accent', ACCENT, rough=0.38, coat=0.55),
+        'glass': material('Canopy', (0.80, 0.87, 0.94, 1), rough=0.02, transmission=1.0, ior=1.45),
+        'lens': material('LightLens', (0.95, 0.97, 1.0, 1), rough=0.05, transmission=1.0, ior=1.5),
+        'rubber': material('Rubber', '#1C1E22', rough=0.72),
+        'steel': material('Steel', '#7D8590', rough=0.32, metallic=0.85),
+        'exhaust': material('Exhaust', '#4A4440', rough=0.5, metallic=0.7),
+        'inlet': material('Inlet', '#101216', rough=0.8),
+        'interior': material('Interior', '#2B2F36', rough=0.65),
+        'seat': material('Seats', '#5A3B2A', rough=0.55),
+        'screen': material('Screen', '#0B1A2C', rough=0.2, emission='#4FA3E3', estr=1.6),
+        'red': material('NavRed', '#FF2B2B', rough=0.2, emission='#FF2B2B', estr=3.0),
+        'green': material('NavGreen', '#2BFF6A', rough=0.2, emission='#2BFF6A', estr=3.0),
+        'white': material('Strobe', '#FFFFFF', rough=0.2, emission='#FFFFFF', estr=2.0),
+    }
+    root = empty('RV7')
+    rig = {'units': 'metres', 'up': '+Z (Blender) / +Y (glTF)', 'nose': '-X', 'left_wing': '+Y', 'parts': []}
+
+    def hinge(name, parent, loc, rot, axis, lo, hi, note):
+        e = empty(name, parent, loc, rot)
+        rig['parts'].append({'node': name, 'axis': axis, 'min_deg': lo, 'max_deg': hi, 'note': note})
+        return e
+
+    # ---------- fuselage: body paint, a white swoosh with a navy pinstripe, navy anti-glare panel ----------
+    n, xs = 56, [0.20 + (6.02 - 0.20) * i / 110 for i in range(111)]
+    rings = [fsection(x, n) for x in xs]
 
     def fmat(i, j):
-        x = xs[i]
-        th = 2 * math.pi * (j + 0.5) / n
-        side = math.cos(th)                       # +1 left side, -1 right side
-        zf = math.sin(th)
-        swoosh_c = 0.10 - 0.35 * max(0, x - 1.4) / 4.6 * 0.6       # the band drops slightly toward the tail
-        band = abs(zf - swoosh_c) < 0.09 - 0.05 * max(0, x - 1.4) / 4.6
-        if abs(side) > 0.55 and band and 0.6 < x < 5.9:
-            return 1
-        if x < 0.55:
-            return 2
+        x = xs[min(i, len(xs) - 1)]; th = 2 * math.pi * (j + 0.5) / n
+        c, s = math.cos(th), math.sin(th)
+        if s > 0.75 and 0.55 < x < 1.45: return 2                              # anti-glare panel ahead of the windscreen
+        centre = 0.05 + 0.10 * math.sin(min(1, max(0, (x - 0.5) / 5.3)) * math.pi * 0.9) - 0.32 * max(0, x - 3.6) / 2.4
+        width = 0.11 * (1 - 0.45 * max(0, x - 1.0) / 5)
+        if abs(c) > 0.45 and 0.5 < x < 5.85:
+            if abs(s - centre) < width: return 1                                # white swoosh
+            if abs(s - (centre - width - 0.035)) < 0.022: return 2              # navy pinstripe under it
         return 0
-    mesh_object('Fuselage', loft(rings, mat_of=fmat), (alu, trim, accent), parent=root)
+    new_obj('Fuselage', loft(rings, closed=True, cap_start=True, cap_end=True), livery_material(), parent=root)
 
-    # canopy bubble (glass) on top, from the panel to behind the seats
+    # ---------- canopy: a thin open glass shell (no lensing), windscreen frame + rear trim ----------
     cr = []
-    for i in range(31):
-        x = 1.50 + 1.65 * i / 30
-        u = (x - 1.50) / 1.65
-        h = 0.50 * math.sin(math.pi * min(1, u * 1.12) ** 0.8) if u < 0.89 else 0.50 * (1 - (u - 0.89) / 0.11 * 0.5)
-        hw, top, _ = lerp_stations(FUSE, x)
-        w = hw * 0.93
-        ring = []
-        for j in range(24):
-            a = math.pi * j / 23
-            ring.append((x, math.cos(a) * w, top - 0.02 + math.sin(a) * max(0.02, h)))
-        for j in range(23, -1, -1):
-            a = math.pi * j / 23
-            ring.append((x, math.cos(a) * w * 0.98, top - 0.03))
-        cr.append(ring)
-    mesh_object('Canopy', loft(cr), (glass,), parent=root)
-    # canopy frame bow
-    bm = bmesh.new(); bmesh.ops.create_cone(bm, cap_ends=True, segments=16, radius1=0.018, radius2=0.018, depth=1.1)
-    bmesh.ops.rotate(bm, verts=bm.verts, cent=(0, 0, 0), matrix=Matrix.Rotation(math.pi / 2, 3, 'X'))
-    bow = mesh_object('CanopyBow', bm, (trim,), subsurf=0, parent=root); bow.location = (2.95, 0, 0.78)
+    for i in range(36):
+        x = 1.50 + 1.66 * i / 35; u = (x - 1.50) / 1.66
+        h = 0.47 * (math.sin(math.pi * min(1.0, u / 0.62) * 0.5) if u < 0.62 else 1 - 0.88 * ((u - 0.62) / 0.38) ** 1.6)
+        hw, top, _ = fstation(x); w = hw * 0.93
+        cr.append([(x, math.cos(math.pi * j / 30) * w, top - 0.015 + math.sin(math.pi * j / 30) * max(0.015, h)) for j in range(31)])
+    new_obj('Canopy', loft(cr, closed=False), M['glass'], parent=root, solidify=0.004, sub=2)
+    for jj in (0, 30):
+        tube('CanopyRail', [r_[jj] for r_ in cr], 0.018, M['accent'], root)
+    for xf, name in ((1.86, 'WindscreenFrame'), (3.13, 'CanopyRearTrim')):
+        u = (xf - 1.50) / 1.66
+        h = 0.47 * (math.sin(math.pi * min(1.0, u / 0.62) * 0.5) if u < 0.62 else 1 - 0.88 * ((u - 0.62) / 0.38) ** 1.6)
+        hw, top, _ = fstation(xf); w = hw * 0.94
+        tube(name, [(xf, math.cos(math.pi * j / 32) * w, top - 0.01 + math.sin(math.pi * j / 32) * h) for j in range(33)], 0.016, M['accent'], root)
 
-    # interior: panel + two seats (seen through the glass)
-    for y in (0.27, -0.27):
-        bm = bmesh.new(); bmesh.ops.create_cube(bm, size=1)
-        bmesh.ops.scale(bm, vec=(0.42, 0.38, 0.62), verts=bm.verts)
-        s = mesh_object('Seat', bm, (seat,), subsurf=2, parent=root); s.location = (2.55, y, 0.12); s.rotation_euler = (0, -0.35, 0)
-    bm = bmesh.new(); bmesh.ops.create_cube(bm, size=1); bmesh.ops.scale(bm, vec=(0.12, 0.98, 0.3), verts=bm.verts)
-    p = mesh_object('Panel', bm, (dark,), subsurf=1, parent=root); p.location = (1.62, 0, 0.36)
+    # ---------- interior: panel with two screens, two seats, two sticks ----------
+    new_obj('Panel', prim('cube', scale=(0.14, 1.0, 0.26)), M['interior'], sub=1, parent=root, loc=(1.66, 0, 0.36))
+    for y in (0.24, -0.24):
+        new_obj('Screen', prim('cube', scale=(0.01, 0.2, 0.14)), M['screen'], sub=0, parent=root, loc=(1.735, y, 0.37))
+        new_obj('SeatBase', prim('cube', scale=(0.5, 0.42, 0.12)), M['seat'], sub=2, parent=root, loc=(2.42, y, -0.16))
+        new_obj('SeatBack', prim('cube', scale=(0.12, 0.42, 0.62)), M['seat'], sub=2, parent=root, loc=(2.72, y, 0.15), rot=(0, 0.28, 0))
+        rod('Stick', (2.12, y, -0.26), (2.06, y, 0.14), 0.016, 0.012, M['interior'], root)
+        new_obj('StickGrip', prim('sphere', r=0.03), M['rubber'], sub=1, parent=root, loc=(2.06, y, 0.16))
 
-    # low wing: rectangular, rounded tips, 3.5° dihedral, airfoil sections (RV-ish 23013.5)
-    def airfoil(chord, t=0.135, m=24):
-        up, lo = [], []
-        for i in range(m + 1):
-            xc = (1 - math.cos(math.pi * i / m)) / 2
-            yt = 5 * t * (0.2969 * math.sqrt(xc) - 0.126 * xc - 0.3516 * xc ** 2 + 0.2843 * xc ** 3 - 0.1036 * xc ** 4)
-            yc = 0.015 * math.sin(math.pi * xc)
-            up.append((xc, yc + yt)); lo.append((xc, yc - yt))
-        loop = up + lo[::-1][1:-1]
-        return [(-(u - 0.27) * chord, v * chord) for u, v in loop]       # x (+ forward), z
-    half, chord, dih = 3.81, 1.47, math.radians(3.5)
-    wrings = []
-    ys = [-half + 2 * half * i / 40 for i in range(41)]
-    for y in ys:
-        tipu = max(0, (abs(y) - (half - 0.32)) / 0.32)                  # last 0.32 m: rounded tip
-        sc_c = math.sqrt(max(0.04, 1 - tipu ** 2)) if tipu > 0 else 1
-        c = chord * (0.55 + 0.45 * sc_c) if tipu > 0 else chord
-        th = 0.135 * (0.3 + 0.7 * sc_c)
-        z0 = -0.36 + abs(y) * math.tan(dih)
-        wrings.append([(2.18 + px * (c / chord) - (chord - c) * 0.1, y, z0 + pz * (th / 0.135) * (c / chord)) for px, pz in airfoil(chord)])
-    def wmat(i, j):
-        return 1 if abs(ys[i]) > half - 0.45 else 0                     # accent wingtips
-    mesh_object('Wing', loft(wrings, mat_of=wmat), (alu, trim), parent=root)
+    # ---------- cowling details: inlets, exhausts ----------
+    for y in (0.16, -0.16):
+        new_obj('CowlInlet', prim('sphere', r=1, u=24, v=12, scale=(0.05, 0.1, 0.075)), M['inlet'], sub=1, parent=root, loc=(0.215, y, 0.06))
+        rod('Exhaust', (1.0, y * 0.8, -0.38), (1.12, y * 0.85, -0.54), 0.028, 0.028, M['exhaust'], root)
 
-    # horizontal stabiliser + elevator
-    hr = []
-    hs = 1.22
-    for i in range(21):
-        y = -hs + 2 * hs * i / 20
-        tipu = max(0, (abs(y) - (hs - 0.18)) / 0.18)
-        k = math.sqrt(max(0.05, 1 - tipu ** 2)) if tipu > 0 else 1
-        c = 0.78 * (0.6 + 0.4 * k)
-        hr.append([(5.82 + px * (c / 1.47) * 1.0 - 0.1, y, 0.2 + pz * 0.6 * (c / 1.47)) for px, pz in airfoil(1.47, 0.11)])
-    mesh_object('HStab', loft(hr), (alu,), parent=root)
-
-    # fin + rudder: the RV's rounded rudder top, accent on the rudder
-    def fin_outline(z):          # leading/trailing edge x at height z above the fuselage top
-        le = 5.18 + 0.62 * (z / 1.0) ** 0.9
-        te = 6.32 - 0.04 * z
-        return le, te
-    fr = []
-    zs = [0.24 + 0.98 * i / 24 for i in range(25)]
-    for z in zs:
-        zz = z - 0.24
-        le, te = fin_outline(zz)
-        if zz > 0.78:                                    # rounded top
-            u = (zz - 0.78) / 0.2
-            mid = (le + te) / 2; half_c = (te - le) / 2 * math.sqrt(max(0.02, 1 - u ** 2))
-            le, te = mid - half_c + 0.06 * u, mid + half_c
-        ch = te - le
-        ring = []
-        for px, pz in airfoil(1.0, 0.10):
-            ring.append((le + (0.27 - px) * ch, pz * ch * 0.8, z))
-        fr.append(ring)
-    def rmat(i, j):
-        return 1 if zs[i] > 0.85 else 0
-    mesh_object('Fin', loft(fr, mat_of=rmat), (alu, trim), parent=root)
-
-    # cowling inlets (dark ovals on the front) + spinner + prop
-    for y in (0.17, -0.17):
-        bm = bmesh.new(); bmesh.ops.create_uvsphere(bm, u_segments=24, v_segments=12, radius=0.09)
-        bmesh.ops.scale(bm, vec=(0.3, 1.1, 0.8), verts=bm.verts)
-        o = mesh_object('Inlet', bm, (dark,), subsurf=1, parent=root); o.location = (0.24, y, 0.04)
-    prof = [(0.0, 0.0)] + [(0.13 * math.sin(math.pi / 2 * (i / 12) ** 0.65), -0.34 * (1 - i / 12)) for i in range(1, 13)]
-    bm = bmesh.new()
-    ring_list = []
-    for r, xoff in prof:
-        ring_list.append([(0.20 + xoff + 0.0, r * math.cos(2 * math.pi * j / 32), r * math.sin(2 * math.pi * j / 32)) for j in range(32)])
-    sp = mesh_object('Spinner', loft(ring_list[1:], cap_start=True, cap_end=True), (accent,), parent=root)
-    prop = bpy.data.objects.new('Prop', None); sc.collection.objects.link(prop); prop.parent = root; prop.location = (0.0, 0, 0)
+    # ---------- prop + spinner (spin about X) ----------
+    prop = hinge('Prop', root, (0.04, 0, -0.04), (0, 0, 0), 'X', -1e9, 1e9, 'spins about X; ~2,400 rpm at cruise (animate 40 rad/s for a soft blur)')
+    sp_rings = []
+    for i in range(1, 17):
+        u = i / 16; r = 0.215 * math.sin(math.pi / 2 * u ** 0.7)
+        sp_rings.append([(-0.24 + 0.40 * u, r * math.cos(2 * math.pi * j / 32), r * math.sin(2 * math.pi * j / 32)) for j in range(32)])
+    new_obj('Spinner', loft(sp_rings, cap_start=True, cap_end=True), M['body'], parent=prop, loc=(-0.04, 0, 0))
     for sgn in (1, -1):
-        bm = bmesh.new(); bmesh.ops.create_cube(bm, size=1)
-        bmesh.ops.scale(bm, vec=(0.03, 0.13, 0.86), verts=bm.verts)
-        bl = mesh_object('Blade', bm, (steel, accent), subsurf=2, parent=prop); bl.location = (0.05, 0, sgn * 0.46); bl.rotation_euler = (sgn * 0.25, 0, 0)
+        blade = []
+        for i in range(13):                                             # tapered, slightly twisted blade
+            r = 0.13 + (0.915 - 0.13) * i / 12; c = 0.15 - 0.06 * (i / 12) ** 1.3; tw = 0.55 - 0.4 * i / 12
+            sec = []
+            for (u, z) in loop(0, 1, 0.12, 8):
+                lx, ly = (u - 0.4) * c, z * c
+                sec.append((lx * math.cos(tw) - ly * math.sin(tw), (lx * math.sin(tw) + ly * math.cos(tw)) * sgn, sgn * r))
+            blade.append(sec)
+        new_obj('Blade', loft(blade, cap_start=True, cap_end=True), M['interior'], parent=prop, loc=(0, 0, 0))
 
-    # main gear: tapered legs + teardrop wheel pants; tailwheel on a spring
-    for sgn in (1, -1):
-        a, b = Vector((1.38, sgn * 0.45, -0.42)), Vector((1.46, sgn * 0.92, -0.92))
-        bm = bmesh.new(); bmesh.ops.create_cone(bm, cap_ends=True, segments=12, radius1=0.05, radius2=0.03, depth=(b - a).length)
-        leg = mesh_object('GearLeg', bm, (trim,), subsurf=1, parent=root)
-        leg.location = (a + b) / 2; leg.rotation_euler = (Vector((0, 0, 1))).rotation_difference(b - a).to_euler()
-        bm = bmesh.new(); bmesh.ops.create_uvsphere(bm, u_segments=32, v_segments=16, radius=0.30)
-        for v in bm.verts:
-            v.co.x *= 1.25 if v.co.x > 0 else 1.85; v.co.y *= 0.36; v.co.z *= 0.62
-        pant = mesh_object('WheelPant', bm, (alu,), subsurf=1, parent=root); pant.location = (1.46, sgn * 0.95, -0.98)
-        bm = bmesh.new(); bmesh.ops.create_cone(bm, cap_ends=True, segments=24, radius1=0.17, radius2=0.17, depth=0.12)
-        bmesh.ops.rotate(bm, verts=bm.verts, cent=(0, 0, 0), matrix=Matrix.Rotation(math.pi / 2, 3, 'X'))
-        tire = mesh_object('Tire', bm, (rubber,), subsurf=1, parent=root); tire.location = (1.46, sgn * 0.95, -1.04)
-    a, b = Vector((5.82, 0, 0.12)), Vector((6.12, 0, -0.18))
-    bm = bmesh.new(); bmesh.ops.create_cone(bm, cap_ends=True, segments=10, radius1=0.025, radius2=0.02, depth=(b - a).length)
-    sp2 = mesh_object('TailSpring', bm, (steel,), subsurf=0, parent=root); sp2.location = (a + b) / 2; sp2.rotation_euler = Vector((0, 0, 1)).rotation_difference(b - a).to_euler()
-    bm = bmesh.new(); bmesh.ops.create_cone(bm, cap_ends=True, segments=20, radius1=0.09, radius2=0.09, depth=0.06)
-    bmesh.ops.rotate(bm, verts=bm.verts, cent=(0, 0, 0), matrix=Matrix.Rotation(math.pi / 2, 3, 'X'))
-    tw = mesh_object('TailWheel', bm, (rubber,), subsurf=1, parent=root); tw.location = (6.14, 0, -0.27)
-    return root
+    # ---------- wing: fixed core + flap + aileron per side + rounded tips, 3.5° dihedral ----------
+    XLE, CH, HALF, F = 1.30, 1.47, 3.81, 0.76                          # LE station, chord, half span, hinge at 76 % chord
+    Z0 = -0.37
+    zc = lambda y: Z0 + abs(y) * math.tan(DIH)
+    FLAP = (0.60, 2.08); AIL = (2.13, 3.42); TIP = 3.44
+
+    def wing_ring(y, u0, u1, k=1.0, t=0.135, n=14):
+        # k < 1 rounds the tip: chord shrinks from both ends, thickness follows
+        c = CH * k; xle = XLE + (CH - c) * 0.45
+        return [(xle + u * c, y, zc(y) + z * c) for (u, z) in loop(u0, u1, t * (0.55 + 0.45 * k), n)]
+    for sgn, side in ((1, 'L'), (-1, 'R')):
+        ys = [sgn * (TIP * i / 30) for i in range(31)]
+        new_obj(f'Wing_{side}', loft([wing_ring(y, 0, F) for y in ys], cap_end=False), M['trim'], parent=root)
+        tip_rings = []
+        for i in range(9):
+            y = sgn * (TIP + (HALF - TIP) * i / 8); q = i / 8
+            tip_rings.append(wing_ring(y, 0, 1, k=max(0.08, math.sqrt(max(0.0, 1 - q ** 2.2)))))
+        new_obj(f'WingTip_{side}', loft(tip_rings, cap_end=True), M['trim'], parent=root)
+        # control surfaces, built in hinge space: local X aft, local Y spanwise (outboard = sgn), local Z up
+        for (y0, y1), kind, lim in ((FLAP, 'Flap', (0, 40)), (AIL, 'Aileron', (-20, 25))):
+            ym = sgn * (y0 + y1) / 2
+            hx = XLE + F * CH; hz = zc(ym) + af(F, 0.135)[2] * CH
+            h = hinge(f'{kind}_{side}', root, (hx, ym, hz), (sgn * DIH, 0, 0), 'Y', -lim[1] if kind == 'Aileron' else -lim[1], lim[0] if kind == 'Flap' else lim[1],
+                      f'{kind.lower()} {side}: rotate about local Y; + = trailing edge up' + ('; flaps deflect down (negative), 0..-40' if kind == 'Flap' else ''))
+            rings_cs = []
+            for i in range(9):
+                ys_ = sgn * (y0 + 0.004 + (y1 - y0 - 0.008) * i / 8)
+                rings_cs.append([((u - F) * CH, (ys_ - ym) / math.cos(DIH), (z - af(F, 0.135)[2]) * CH) for (u, z) in loop(F + 0.012, 1, 0.135, 10)])
+            new_obj(f'{kind}Panel_{side}', loft(rings_cs, cap_start=True, cap_end=True), M['trim'], parent=h)
+        # nav light (left red, right green), landing light, fuel cap
+        new_obj(f'NavLight_{side}', prim('sphere', r=0.035, u=16, v=8), M['red'] if sgn > 0 else M['green'], sub=1, parent=root, loc=(XLE + 0.18, sgn * (HALF - 0.03), zc(HALF)))
+        new_obj(f'LandingLight_{side}', prim('sphere', r=1, u=16, v=8, scale=(0.02, 0.09, 0.04)), M['lens'], sub=1, parent=root, loc=(XLE + 0.01, sgn * 3.05, zc(3.05) + 0.01))
+        new_obj(f'FuelCap_{side}', prim('cyl', r1=0.045, d=0.01, seg=24), M['steel'], sub=0, parent=root, loc=(XLE + 0.32, sgn * 1.55, zc(1.55) + 0.095))
+    # pitot tube under the left wing
+    rod('PitotMast', (XLE + 0.35, 2.55, zc(2.55) - 0.06), (XLE + 0.30, 2.55, zc(2.55) - 0.2), 0.012, 0.01, M['steel'], root)
+    rod('PitotTube', (XLE + 0.31, 2.55, zc(2.55) - 0.2), (XLE - 0.12, 2.55, zc(2.55) - 0.2), 0.011, 0.011, M['steel'], root)
+
+    # ---------- horizontal tail: stabiliser + two elevator halves on one hinge + trim tab ----------
+    SX, SC, SH, SF, SZ = 5.30, 0.88, 1.25, 0.58, 0.215
+    def stab_ring(y, u0, u1, k=1.0, local=None):
+        c = SC * k; xle = SX + (SC - c) * 0.5
+        pts = [(xle + u * c, y, SZ + z * c) for (u, z) in loop(u0, u1, 0.11, 12, camber=0.0)]
+        if local: pts = [(px - local[0], py - local[1], pz - local[2]) for px, py, pz in pts]
+        return pts
+    elev = hinge('Elevator', root, (SX + SF * SC, 0, SZ), (0, 0, 0), 'Y', -25, 20, 'elevator: + = trailing edge up (stick back)')
+    for sgn, side in ((1, 'L'), (-1, 'R')):
+        ys = [sgn * (SH * i / 20) for i in range(21)]
+        ks = [math.sqrt(max(0.06, 1 - max(0, (abs(y) - (SH - 0.2)) / 0.2) ** 2)) for y in ys]
+        new_obj(f'HStab_{side}', loft([stab_ring(y, 0, SF, k) for y, k in zip(ys, ks)], cap_end=True), M['trim'], parent=root)
+        ys2 = [sgn * (0.07 + (SH - 0.07) * i / 18) for i in range(19)]
+        ks2 = [math.sqrt(max(0.06, 1 - max(0, (abs(y) - (SH - 0.2)) / 0.2) ** 2)) for y in ys2]
+        new_obj(f'ElevatorPanel_{side}', loft([stab_ring(y, SF + 0.015, 1, k, local=(SX + SF * SC, 0, SZ)) for y, k in zip(ys2, ks2)], cap_start=True, cap_end=True), M['trim'], parent=elev)
+    trim = hinge('TrimTab', elev, (SC * (0.88 - SF), 0.5, 0), (0, 0, 0), 'Y', -15, 15, 'elevator trim tab (left elevator), + = tab trailing edge up')
+    new_obj('TrimTabPanel', loft([[(px - (SX + 0.88 * SC), py - 0.5, pz - SZ) for px, py, pz in stab_ring(y, 0.885, 1)] for y in (0.32 + 0.36 * i / 4 for i in range(5))], cap_start=True, cap_end=True), M['trim'], parent=trim)
+
+    # ---------- vertical tail: swept fin + the RV's big rounded rudder with a balance horn ----------
+    HX = 5.86
+    fin_rings = []
+    for i in range(20):
+        z = 0.30 + (1.16 - 0.30) * i / 19
+        le = 4.92 + (z - 0.30) * 0.78
+        c = (HX - le) / 0.985
+        fin_rings.append([(le + u * c, zz * c * 0.9, z) for (u, zz) in loop(0, 0.985, 0.10, 12, camber=0.0)])
+    new_obj('Fin', loft(fin_rings, cap_end=True), M['body'], parent=root)
+    rud = hinge('Rudder', root, (HX, 0, 0.12), (0, 0, 0), 'Z', -30, 30, 'rudder: rotate about local Z; + = trailing edge left (+Y)')
+    rud_rings = []
+    for i in range(26):
+        z = 0.10 + (1.28 - 0.10) * i / 25
+        aft = (0.36 + 0.06 * (z - 0.1)) * (1 if z < 1.2 else math.sqrt(max(0.05, 1 - ((z - 1.2) / 0.08) ** 2)))
+        fwd = 0.0 if z < 1.17 else 0.15 * min(1, (z - 1.17) / 0.03) * (1 if z < 1.24 else math.sqrt(max(0.05, 1 - ((z - 1.24) / 0.04) ** 2)))
+        c = aft + fwd + 0.02
+        rud_rings.append([(-fwd + u * c, zz * c * 0.8, z - 0.12) for (u, zz) in loop(0, 1, 0.12 if fwd > 0 else 0.09, 12, camber=0.0)])
+    new_obj('RudderPanel', loft(rud_rings, cap_start=True, cap_end=True), M['body'], parent=rud)
+    new_obj('Strobe', prim('sphere', r=0.03, u=16, v=8), M['white'], sub=1, parent=rud, loc=(0.40, 0, 0.62))
+    rod('Antenna', (3.75, 0, 0.49), (3.95, 0, 0.78), 0.012, 0.006, M['interior'], root)
+
+    # ---------- landing gear: tapered spring legs with fairings, teardrop wheel pants, steerable tailwheel ----------
+    WX, WY, WZ, WR = 1.08, 0.97, -1.03, 0.17
+    for sgn, side in ((1, 'L'), (-1, 'R')):
+        rod(f'GearLeg_{side}', (1.28, sgn * 0.44, -0.43), (WX + 0.02, sgn * (WY - 0.1), WZ + 0.12), 0.05, 0.034, M['trim'], root)
+        pant = prim('sphere', r=1, u=40, v=20)
+        for v in pant.verts:
+            v.co.x *= 0.30 if v.co.x < 0 else 0.62; v.co.y *= 0.115; v.co.z *= 0.165 * (1 - 0.25 * max(0, v.co.x))
+        new_obj(f'WheelPant_{side}', pant, M['trim'], sub=2, parent=root, loc=(WX + 0.05, sgn * WY, WZ + 0.03))
+        new_obj(f'Tire_{side}', prim('cyl', r1=WR, d=0.11, seg=32), M['rubber'], sub=1, parent=root, loc=(WX, sgn * WY, WZ), rot=(math.pi / 2, 0, 0))
+    # 3-point attitude ≈ 11.5°: the tailwheel sits on the same ground line as the mains
+    tw_x = 6.08; tw_ground = (WZ - WR) + (tw_x - WX) * math.tan(math.radians(11.5)); tw_r = 0.085
+    rod('TailSpring', (5.80, 0, 0.14), (tw_x - 0.02, 0, tw_ground + tw_r + 0.06), 0.022, 0.018, M['steel'], root)
+    tw = hinge('TailWheel', root, (tw_x - 0.02, 0, tw_ground + tw_r + 0.06), (0, 0, 0), 'Z', -30, 30, 'tailwheel steering, + = left; follows the rudder on the ground')
+    rod('TailFork', (0, 0, 0), (0.03, 0, -0.06), 0.012, 0.012, M['steel'], tw)
+    new_obj('TailTire', prim('cyl', r1=tw_r, d=0.05, seg=24), M['rubber'], sub=1, parent=tw, loc=(0.03, 0, -0.06), rot=(math.pi / 2, 0, 0))
+    rig['ground_attitude_deg'] = 11.5
+    rig['main_wheel_bottom_z'] = WZ - WR
+    return sc, root, rig
 
 
-# ---------------------------------------------------------------- preview: golden-hour air-to-air
-def preview(sc, root):
-    world = bpy.data.worlds.new('Sky'); sc.world = world; world.use_nodes = True
-    nt = world.node_tree; bg = nt.nodes['Background']
+# ================================================================ poses
+def pose(name):
+    def rot(obj, axis, deg):
+        o = bpy.data.objects[obj]; e = Euler((0, 0, 0)); setattr(e, axis.lower(), math.radians(deg))
+        base = o.rotation_euler.copy(); o.rotation_euler = (base.to_matrix() @ e.to_matrix()).to_euler()
+    if name == 'controls':          # stick left + back, right rudder, flaps 20°
+        rot('Aileron_L', 'Y', 18); rot('Aileron_R', 'Y', -14); rot('Elevator', 'Y', 14); rot('Rudder', 'Z', -18)
+        rot('Flap_L', 'Y', -20); rot('Flap_R', 'Y', -20); rot('TrimTab', 'Y', -8)
+    if name == 'ground':
+        r = bpy.data.objects['RV7']; r.rotation_euler = (0, math.radians(-11.5), 0)
+
+
+# ================================================================ preview renders
+def setup_render(sc, res=(1080, 1350)):
+    r = sc.render; r.engine = 'CYCLES'
+    sc.cycles.samples = int(os.environ.get('SAMPLES', 48)); sc.cycles.use_denoising = True
+    r.resolution_x, r.resolution_y = res; r.resolution_percentage = int(os.environ.get('PCT', 50))
+    vt = [i.identifier for i in sc.view_settings.bl_rna.properties['view_transform'].enum_items]
+    sc.view_settings.view_transform = 'AgX' if 'AgX' in vt else 'Filmic'
+    looks = [i.identifier for i in sc.view_settings.bl_rna.properties['look'].enum_items]
+    sc.view_settings.look = next((l for l in looks if 'Medium High Contrast' in l), next((l for l in looks if 'Punchy' in l), 'None'))
+
+
+def area(sc, name, energy, color, loc, size, target=(3, 0, 0)):
+    L = bpy.data.lights.new(name, 'AREA'); L.energy = energy; L.color = color; L.size = size
+    o = bpy.data.objects.new(name, L); sc.collection.objects.link(o); o.location = loc
+    o.rotation_euler = (Vector(target) - Vector(loc)).to_track_quat('-Z', 'Y').to_euler()
+    return o
+
+
+def camera(sc, loc, look, lens=70):
+    cam = sc.camera
+    if cam is None:
+        cam = bpy.data.objects.new('Cam', bpy.data.cameras.new('Cam')); sc.collection.objects.link(cam); sc.camera = cam
+    cam.data.lens = lens; cam.location = loc
+    cam.rotation_euler = (Vector(look) - Vector(loc)).to_track_quat('-Z', 'Y').to_euler()
+
+
+def studio(sc):
+    """Soft studio: a pale gradient world, gentle big lights and a shadow-catcher floor. Judge the airplane itself."""
+    w = bpy.data.worlds.new('Studio'); sc.world = w; w.use_nodes = True; nt = w.node_tree; bg = nt.nodes['Background']
     tc = nt.nodes.new('ShaderNodeTexCoord'); sep = nt.nodes.new('ShaderNodeSeparateXYZ'); nt.links.new(tc.outputs['Generated'], sep.inputs[0])
     ramp = nt.nodes.new('ShaderNodeValToRGB'); el = ramp.color_ramp.elements
-    el[0].position, el[0].color = 0.0, hex_rgb('#C98E6E')          # below the horizon: warm haze
-    el[1].position, el[1].color = 1.0, hex_rgb('#2F5597')          # zenith: deep blue
-    for pos, col in ((0.47, '#F4C79A'), (0.52, '#FFD9A8'), (0.6, '#E9A07E'), (0.75, '#7E8DBA')):
-        e = el.new(pos); e.color = hex_rgb(col)
+    el[0].position, el[0].color = 0.35, lin('#DCE3EA'); el[1].position, el[1].color = 0.9, lin('#9FB6CF')
+    nt.links.new(sep.outputs['Z'], ramp.inputs['Fac']); nt.links.new(ramp.outputs['Color'], bg.inputs['Color']); bg.inputs['Strength'].default_value = 0.55
+    bm = bmesh.new(); bmesh.ops.create_grid(bm, x_segments=1, y_segments=1, size=60)
+    floor = new_obj('Floor', bm, material('Floor', '#E4E9EE', rough=0.9), sub=0, loc=(3, 0, -1.25))
+    floor.is_shadow_catcher = True
+    area(sc, 'Key', 650, (1.0, 0.94, 0.86), (-6, 9, 7), 7)
+    area(sc, 'Fill', 260, (0.84, 0.9, 1.0), (-7, -8, 3), 9)
+    area(sc, 'Rim', 520, (1.0, 0.92, 0.82), (12, 6, 5), 6)
+    area(sc, 'Top', 220, (1.0, 1.0, 1.0), (3, 0, 10), 12)
+
+
+def sky(sc):
+    """Art-directed golden hour: warm gradient sky, warm key + cool fill, patchwork ground in haze."""
+    w = bpy.data.worlds.new('Sky'); sc.world = w; w.use_nodes = True; nt = w.node_tree; bg = nt.nodes['Background']
+    tc = nt.nodes.new('ShaderNodeTexCoord'); sep = nt.nodes.new('ShaderNodeSeparateXYZ'); nt.links.new(tc.outputs['Generated'], sep.inputs[0])
+    ramp = nt.nodes.new('ShaderNodeValToRGB'); el = ramp.color_ramp.elements
+    el[0].position, el[0].color = 0.0, lin('#B88A72'); el[1].position, el[1].color = 1.0, lin('#3C63A8')
+    el[0].color = lin('#B9C6D6'); el[1].color = lin('#4F7DC0')
+    for pos, col in ((0.5, '#F1E6DA'), (0.52, '#D9E3EE'), (0.58, '#A9C2E2'), (0.7, '#7DA2D4')):
+        e = el.new(pos); e.color = lin(col)
     mr = nt.nodes.new('ShaderNodeMapRange'); mr.inputs['From Min'].default_value = -1; mr.inputs['From Max'].default_value = 1
     nt.links.new(sep.outputs['Z'], mr.inputs['Value']); nt.links.new(mr.outputs['Result'], ramp.inputs['Fac'])
-    nt.links.new(ramp.outputs['Color'], bg.inputs['Color']); bg.inputs['Strength'].default_value = 1.0
-    # patchwork countryside 150 m below, fading into the haze with distance (the chrome reflects it)
+    # soft streaky cloud layer mixed over the gradient
+    nz_ = nt.nodes.new('ShaderNodeTexNoise'); nz_.inputs['Scale'].default_value = 2.2; nz_.inputs['Detail'].default_value = 6
+    mp = nt.nodes.new('ShaderNodeMapping'); mp.inputs['Scale'].default_value = (1.0, 2.6, 6.0); nt.links.new(tc.outputs['Generated'], mp.inputs['Vector']); nt.links.new(mp.outputs['Vector'], nz_.inputs['Vector'])
+    cr_ = nt.nodes.new('ShaderNodeMapRange'); cr_.inputs['From Min'].default_value = 0.5; cr_.inputs['From Max'].default_value = 0.72
+    nt.links.new(nz_.outputs['Fac'], cr_.inputs['Value'])
+    hm = nt.nodes.new('ShaderNodeMapRange'); hm.inputs['From Min'].default_value = 0.02; hm.inputs['From Max'].default_value = 0.35; hm.inputs['To Min'].default_value = 0.9; hm.inputs['To Max'].default_value = 0.0
+    nt.links.new(sep.outputs['Z'], hm.inputs['Value'])
+    cm = nt.nodes.new('ShaderNodeMath'); cm.operation = 'MULTIPLY'; nt.links.new(cr_.outputs['Result'], cm.inputs[0]); nt.links.new(hm.outputs['Result'], cm.inputs[1])
+    mx = nt.nodes.new('ShaderNodeMix'); mx.data_type = 'RGBA'; nt.links.new(cm.outputs[0], mx.inputs['Factor']); nt.links.new(ramp.outputs['Color'], mx.inputs[6]); mx.inputs[7].default_value = lin('#F4F1EC')
+    nt.links.new(mx.outputs[2], bg.inputs['Color']); bg.inputs['Strength'].default_value = 1.0
+    for name, energy, col, d in (('Sun', 3.6, (1.0, 0.88, 0.74), (-0.8, 0.9, 0.45)), ('SkyFill', 1.0, (0.78, 0.86, 1.0), (0.6, -0.4, 0.9))):
+        L = bpy.data.lights.new(name, 'SUN'); L.energy = energy; L.color = col; L.angle = math.radians(3)
+        o = bpy.data.objects.new(name, L); sc.collection.objects.link(o); o.rotation_euler = (-Vector(d)).to_track_quat('-Z', 'Y').to_euler()
     bm = bmesh.new(); bmesh.ops.create_grid(bm, x_segments=1, y_segments=1, size=12000)
-    gnd = mesh_object('Ground', bm, (), subsurf=0); gnd.location = (0, 0, -150)
+    gnd = new_obj('Ground', bm, [], sub=0, loc=(0, 0, -160)); gnd.hide_render = '--ground' not in ARGS   # air-to-air: sky only
     gm = bpy.data.materials.new('Fields'); gm.use_nodes = True; N, Lk = gm.node_tree.nodes, gm.node_tree.links
     bsdf = N['Principled BSDF']; bsdf.inputs['Roughness'].default_value = 0.95
-    tc = N.new('ShaderNodeTexCoord'); vor = N.new('ShaderNodeTexVoronoi'); vor.inputs['Scale'].default_value = 0.035; vor.inputs['Randomness'].default_value = 0.85
-    Lk.new(tc.outputs['Object'], vor.inputs['Vector'])
-    ramp = N.new('ShaderNodeValToRGB'); el = ramp.color_ramp.elements
-    el[0].color = hex_rgb('#4F7A3A'); el[1].color = hex_rgb('#C9A85E')
-    for pos, col in ((0.3, '#6E9446'), (0.55, '#94A852'), (0.75, '#3E6A35')):
-        e = el.new(pos); e.color = hex_rgb(col)
-    Lk.new(vor.outputs['Color'], ramp.inputs['Fac']) if 'Color' in vor.outputs else Lk.new(vor.outputs[1], ramp.inputs['Fac'])
-    cd = N.new('ShaderNodeCameraData'); mr = N.new('ShaderNodeMapRange'); mr.inputs['From Min'].default_value = 300; mr.inputs['From Max'].default_value = 5000
-    Lk.new(cd.outputs['View Distance'], mr.inputs['Value'])
+    tcc = N.new('ShaderNodeTexCoord'); vor = N.new('ShaderNodeTexVoronoi'); vor.inputs['Scale'].default_value = 0.03
+    Lk.new(tcc.outputs['Object'], vor.inputs['Vector'])
+    fr = N.new('ShaderNodeValToRGB'); e2 = fr.color_ramp.elements; fr.color_ramp.interpolation = 'CONSTANT'
+    e2[0].color = lin('#6E9B4A'); e2[1].position, e2[1].color = 0.85, lin('#4E7E3E')
+    for pos, col in ((0.2, '#A3B45E'), (0.38, '#D2B66A'), (0.55, '#88A851'), (0.7, '#B9A15C')):
+        e = e2.new(pos); e.color = lin(col)
+    Lk.new(vor.outputs['Color'] if 'Color' in vor.outputs else vor.outputs[1], fr.inputs['Fac'])
+    cd = N.new('ShaderNodeCameraData'); mr2 = N.new('ShaderNodeMapRange'); mr2.inputs['From Min'].default_value = 250; mr2.inputs['From Max'].default_value = 5000
+    Lk.new(cd.outputs['View Distance'], mr2.inputs['Value'])
     mix = N.new('ShaderNodeMix'); mix.data_type = 'RGBA'
-    Lk.new(mr.outputs['Result'], mix.inputs['Factor']); Lk.new(ramp.outputs['Color'], mix.inputs[6]); mix.inputs[7].default_value = hex_rgb('#E8B48C')
-    Lk.new(mix.outputs[2], bsdf.inputs['Base Color'])
-    em = N.new('ShaderNodeEmission'); Lk.new(mix.outputs[2], em.inputs['Color']); em.inputs['Strength'].default_value = 0.0
-    gnd.data.materials.append(gm)
-    sun = bpy.data.objects.new('Sun', bpy.data.lights.new('Sun', 'SUN')); sc.collection.objects.link(sun)
-    sun.data.energy = 3.6; sun.data.color = (1.0, 0.78, 0.55); sun.data.angle = math.radians(2.5)
-    # key light from the camera side, ~22° up: shows the colour and the form (a classic beauty-light setup)
-    sun.rotation_euler = (-Vector((1.0, 0.75, 0.55))).to_track_quat('-Z', 'Y').to_euler()
-    fill = bpy.data.objects.new('Rim', bpy.data.lights.new('Rim', 'SUN')); sc.collection.objects.link(fill)
-    fill.data.energy = 2.2; fill.data.color = (1.0, 0.72, 0.5); fill.rotation_euler = (-Vector((-1.0, -0.4, 0.35))).to_track_quat('-Z', 'Y').to_euler()
-    cam = bpy.data.objects.new('Cam', bpy.data.cameras.new('Cam')); sc.collection.objects.link(cam); sc.camera = cam
-    cam.data.lens = 85; cam.data.dof.use_dof = True; cam.data.dof.focus_object = root; cam.data.dof.aperture_fstop = 2.8
-    r = sc.render
-    r.engine = 'CYCLES'; sc.cycles.samples = int(os.environ.get('SAMPLES', 48)); sc.cycles.use_denoising = True
-    r.resolution_x, r.resolution_y, r.resolution_percentage = 1080, 1920, int(os.environ.get('PCT', 50))
-    r.film_transparent = False
-    sc.view_settings.view_transform = 'AgX' if 'AgX' in [i.identifier for i in sc.view_settings.bl_rna.properties['view_transform'].enum_items] else 'Filmic'
-    looks = [i.identifier for i in sc.view_settings.bl_rna.properties['look'].enum_items]
-    sc.view_settings.look = next((l for l in looks if 'Punchy' in l), 'None')
-    shots = {'front34': ((19.5, 18.0, 5.2), (2.7, 0.0, -0.1)), 'beauty': ((13.5, 12.0, -0.6), (2.6, 0.0, 0.35)), 'side': ((3.0, 24.0, 0.6), (3.0, 0, 0.0)), 'rear34': ((-10.5, -15.0, 4.5), (2.8, 0, 0.1))}
-    which = [a.split('=', 1)[1] for a in ARGS if a.startswith('--shot=')] or list(shots)
-    for name in which:
-        loc, look = shots[name]
-        cam.location = loc
-        d = Vector(look) - Vector(loc); cam.rotation_euler = d.to_track_quat('-Z', 'Y').to_euler()
-        r.filepath = os.path.join(OUT, f'rv7_preview_{name}{TAG}.png')
-        bpy.ops.render.render(write_still=True)
-        print('preview →', r.filepath)
+    Lk.new(mr2.outputs['Result'], mix.inputs['Factor']); Lk.new(fr.outputs['Color'], mix.inputs[6]); mix.inputs[7].default_value = lin('#E3B892')
+    Lk.new(mix.outputs[2], bsdf.inputs['Base Color']); gnd.data.materials.append(gm)
+
+
+STUDIO_SHOTS = {
+    'studio_front34': ((-9.5, 10.5, 3.2), (2.9, 0, -0.1)),
+    'studio_side': ((2.9, 17.0, 0.4), (2.9, 0, -0.05)),
+    'studio_rear34': ((13.5, -10.0, 4.2), (3.0, 0, 0.0)),
+    'studio_top': ((3.0, 0.01, 16.0), (3.0, 0, 0)),
+    'studio_low': ((-7.5, 7.5, -0.95), (2.6, 0, 0.25)),
+}
+SKY_SHOTS = {'beauty': ((-13.0, 11.0, -1.9), (2.5, 0.0, 0.25))}
+
+
+def render(sc, name, loc, look, lens=70):
+    camera(sc, loc, look, lens)
+    sc.render.filepath = os.path.join(OUT, f'rv7_{name}{TAG}.png')
+    bpy.ops.render.render(write_still=True)
+    print('render →', sc.render.filepath)
 
 
 if __name__ == '__main__':
     os.makedirs(OUT, exist_ok=True)
-    sc = reset()
-    root = build(sc)
+    sc, root, rig = build()
     bpy.ops.wm.save_as_mainfile(filepath=os.path.join(OUT, 'rv7.blend'))
+    json.dump(rig, open(os.path.join(OUT, 'rv7_rig.json'), 'w'), indent=1)
     try:
         bpy.ops.export_scene.gltf(filepath=os.path.join(OUT, 'rv7.glb'), export_apply=True, export_yup=True)
-        print('glb →', os.path.join(OUT, 'rv7.glb'))
     except Exception as e:
         print('glb export skipped:', e)
+    if arg('pose'): pose(arg('pose'))
     if '--preview' in ARGS:
-        preview(sc, root)
+        shots = arg('shot')
+        setup_render(sc)
+        if not shots or shots.startswith('studio'):
+            studio(sc)
+            for k, (loc, look) in STUDIO_SHOTS.items():
+                if not shots or shots == k or shots == 'studio': render(sc, k, loc, look, 85 if k != 'studio_top' else 50)
+        if shots in ('beauty', None):
+            for o in [o for o in bpy.data.objects if o.name in ('Key', 'Fill', 'Rim', 'Top', 'Floor')]: bpy.data.objects.remove(o)
+            sky(sc)
+            setup_render(sc, (1080, 1920))
+            for k, (loc, look) in SKY_SHOTS.items(): render(sc, k, loc, look, 70)
