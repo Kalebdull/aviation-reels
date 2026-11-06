@@ -142,7 +142,7 @@ def loop(u0, u1, t, n=14, camber=0.018):
 # ================================================================ fuselage
 # station x, half-width, top, bottom  (RV-7: deep cabin, short cowl, slim tailcone)
 FUSE = [
-    (0.20, 0.235, 0.16, -0.25), (0.45, 0.37, 0.265, -0.36), (0.85, 0.49, 0.36, -0.44), (1.25, 0.56, 0.43, -0.46),
+    (0.20, 0.36, 0.20, -0.28), (0.45, 0.475, 0.31, -0.39), (0.85, 0.545, 0.39, -0.45), (1.25, 0.575, 0.44, -0.46),
     (1.70, 0.585, 0.47, -0.45), (2.40, 0.59, 0.49, -0.42), (3.00, 0.555, 0.495, -0.36), (3.80, 0.40, 0.455, -0.18),
     (4.75, 0.25, 0.395, -0.02), (5.60, 0.12, 0.35, 0.08), (6.02, 0.035, 0.33, 0.13),
 ]
@@ -166,14 +166,26 @@ def fstation(x):
     return out
 
 
+CX0, CX1 = 1.46, 3.30          # canopy (windscreen base → where it lands on the turtledeck)
+
+
+def canopy_add(x, y):
+    """Extra height the canopy adds to the fuselage top at (x, y). Zero at the sides and both ends, so the glass grows
+    out of the skin with no seam: the cabin sides flow straight up into it and it lands on the turtledeck."""
+    if not (CX0 < x < CX1): return 0.0
+    hw = fstation(x)[0]; q = (abs(y) / hw) / 0.80        # the bulge starts exactly at the glass sill line
+    if q >= 1: return 0.0
+    return canopy_h((x - CX0) / (CX1 - CX0)) * (1 - q ** 2.6) ** 0.5
+
+
 def fsurf_z(x, y, k=3.3):
-    """Height of the fuselage's upper surface at station x, lateral offset y."""
+    """Height of the fuselage's upper surface (including the canopy) at station x, lateral offset y."""
     hw, top, bot = fstation(x); mid, hh = (top + bot) / 2, (top - bot) / 2
     c = min(0.999, abs(y) / hw) ** (k / 2); s_ = math.sqrt(max(0.0, 1 - c * c))
-    return mid + s_ ** (2 / k) * hh
+    return mid + s_ ** (2 / k) * hh + canopy_add(x, y)
 
 
-def canopy_h(u, H=0.34):
+def canopy_h(u, H=0.40):
     """Canopy height above the deck line along its length: steep raked windscreen, long low taper into the turtledeck."""
     return H * math.sin(math.pi * max(0.0, min(1.0, u)) ** 0.72) ** 0.8
 
@@ -183,11 +195,27 @@ def fsection(x, n=104, k=3.3):
     out = []
     for j in range(n):
         th = 2 * math.pi * j / n; c, s = math.cos(th), math.sin(th)
-        out.append((x, math.copysign(abs(c) ** (2 / k), c) * hw, mid + math.copysign(abs(s) ** (2 / k), s) * hh))
+        y = math.copysign(abs(c) ** (2 / k), c) * hw
+        z = mid + math.copysign(abs(s) ** (2 / k), s) * hh
+        if s > 0: z += canopy_add(x, y)
+        out.append((x, y, z))
     return out
 
 
 # ================================================================ livery painted in the shader (smooth curves, any mesh density)
+def tinted_glass():
+    """Smoky tinted canopy: a thin-skin glass (no lensing) that still reflects the sky like real acrylic."""
+    m = bpy.data.materials.new('CanopyTint'); m.use_nodes = True; N, L = m.node_tree.nodes, m.node_tree.links
+    out = N['Material Output']; N.remove(N['Principled BSDF'])
+    tr = N.new('ShaderNodeBsdfTransparent'); tr.inputs['Color'].default_value = (0.34, 0.40, 0.47, 1)      # the tint
+    gl = N.new('ShaderNodeBsdfGlossy'); gl.inputs['Roughness'].default_value = 0.02
+    fr = N.new('ShaderNodeFresnel'); fr.inputs['IOR'].default_value = 1.5
+    mx = N.new('ShaderNodeMixShader'); L.new(fr.outputs[0], mx.inputs[0]); L.new(tr.outputs[0], mx.inputs[1]); L.new(gl.outputs[0], mx.inputs[2])
+    L.new(mx.outputs[0], out.inputs['Surface'])
+    m.blend_method = 'BLEND' if hasattr(m, 'blend_method') else None
+    return m
+
+
 def livery_material():
     m = bpy.data.materials.new('Livery'); m.use_nodes = True
     N, L = m.node_tree.nodes, m.node_tree.links
@@ -233,7 +261,7 @@ def build():
         'body': material('Paint_Body', BODY, rough=0.22, coat=1.0),
         'trim': material('Paint_Trim', TRIM, rough=0.22, coat=1.0),
         'accent': material('Paint_Accent', ACCENT, rough=0.25, coat=1.0),
-        'glass': material('Canopy', (0.80, 0.87, 0.94, 1), rough=0.02, transmission=1.0, ior=1.45),
+        'glass': material('Canopy', (0.74, 0.82, 0.90, 1), rough=0.0, transmission=1.0, ior=1.0),
         'lens': material('LightLens', (0.95, 0.97, 1.0, 1), rough=0.05, transmission=1.0, ior=1.5),
         'rubber': material('Rubber', '#1C1E22', rough=0.72),
         'steel': material('Steel', '#7D8590', rough=0.32, metallic=0.85),
@@ -268,24 +296,27 @@ def build():
             if abs(s - centre) < width: return 1                                # white swoosh
             if abs(s - (centre - width - 0.035)) < 0.022: return 2              # navy pinstripe under it
         return 0
-    new_obj('Fuselage', loft(rings, closed=True, cap_start=True, cap_end=True), livery_material(), parent=root, sub=1)
-
-    # ---------- canopy: a thin open glass shell (no lensing), windscreen frame + rear trim ----------
-    cr = []
-    for i in range(36):
-        x = 1.50 + 1.66 * i / 35; u = (x - 1.50) / 1.66
-        h = canopy_h(u)
-        hw, top, _ = fstation(x); w = hw * 0.84; base = fsurf_z(x, w) - 0.006
-        hh_ = max(0.015, h + (top - base))                                             # bubble height measured from the sill
-        cr.append([(x, math.cos(math.pi * j / 30) * w, base + math.sin(math.pi * j / 30) ** 0.7 * hh_) for j in range(31)])
-    new_obj('Canopy', loft(cr, closed=False), M['glass'], parent=root, solidify=0.004, sub=2)
-    for jj in (0, 30):
-        tube('CanopyRail', [r_[jj] for r_ in cr], 0.018, M['accent'], root)
-    for xf, name in ((1.84, 'WindscreenFrame'),):
-        u = (xf - 1.50) / 1.66
-        h = canopy_h(u)
-        hw, top, _ = fstation(xf); w = hw * 0.85; base = fsurf_z(xf, w) - 0.004; hh_ = max(0.015, h + (top - base))
-        tube(name, [(xf, math.cos(math.pi * j / 32) * w, base + math.sin(math.pi * j / 32) ** 0.7 * hh_) for j in range(33)], 0.016, M['accent'], root)
+    def is_glass(i, j):
+        # glass = a fixed band of the cross-section (a clean sill line along one vertex row) where the canopy is tall enough
+        th = 2 * math.pi * (j + 0.5) / n
+        if math.sin(th) <= 0: return False
+        q = abs(math.cos(th)) ** (2 / 3.3)                       # = |y| / half-width for this row
+        xm = (xs[min(i, len(xs) - 1)] + xs[min(i + 1, len(xs) - 1)]) / 2
+        return q < 0.80 and canopy_h((xm - CX0) / (CX1 - CX0)) > 0.012 if CX0 < xm < CX1 else False
+    new_obj('Fuselage', loft(rings, closed=True, cap_start=True, cap_end=True, mat_of=lambda i, j: 1 if is_glass(i, j) else 0),
+            (livery_material(), tinted_glass()), parent=root, sub=1)
+    # black canopy frame: rails along both sills + the windscreen bow, all lying ON the skin
+    left, right = [], []
+    for i in range(len(rings) - 1):
+        js = [j for j in range(n // 2 + 1) if is_glass(i, j)]
+        if js:
+            left.append(rings[i][min(js)]); right.append(rings[i][(max(js) + 1) % n])
+    for side_pts in (left, right):
+        tube('CanopyRail', [(p[0], p[1] * 1.004, p[2] + 0.004) for p in side_pts], 0.014, M['accent'], root)
+    glass_rows = [i for i in range(len(rings) - 1) if any(is_glass(i, j) for j in range(n // 2 + 1))]
+    for ib, name in ((glass_rows[0], 'WindscreenBase'), (min(range(len(xs)), key=lambda i: abs(xs[i] - 1.98)), 'WindscreenBow')):
+        js = [j for j in range(n // 2 + 2) if is_glass(ib, j) or is_glass(ib, j - 1)]
+        tube(name, [(rings[ib][j][0], rings[ib][j][1], rings[ib][j][2] + 0.006) for j in js], 0.016, M['accent'], root)
 
     # ---------- interior: panel with two screens, two seats, two sticks ----------
     new_obj('Panel', prim('cube', scale=(0.14, 1.0, 0.26)), M['interior'], sub=1, parent=root, loc=(1.66, 0, 0.36))
@@ -297,10 +328,10 @@ def build():
         new_obj('StickGrip', prim('sphere', r=0.03), M['rubber'], sub=1, parent=root, loc=(2.06, y, 0.16))
 
     # ---------- cowling details: inlets, exhausts ----------
-    for y in (0.19, -0.19):
+    for y in (0.235, -0.235):
         # sporty round intakes: open oval mouths with thin lips, long cheeks flowing back into the cowl
         R, r_, EZ = 0.064, 0.011, 0.78                     # mouth radius, lip radius, vertical squash (oval)
-        cx, cz = 0.215, 0.02
+        cx, cz = 0.205, 0.035
         cheek = prim('sphere', r=1, u=48, v=24)
         bmesh.ops.delete(cheek, geom=[v for v in cheek.verts if v.co.x < -0.05], context='VERTS')     # open at the front
         for v in cheek.verts:
