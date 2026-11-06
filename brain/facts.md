@@ -34,3 +34,12 @@ Format: `- **Claim.** Detail. — Source`
 - **Without RAIM there's no integrity assurance, and an IFR receiver alerts the pilot.** — AIM 1-1-17
 - **WAAS uses ground reference stations at surveyed locations (including Canada and Mexico); corrections go up to geostationary satellites and are broadcast down, along with integrity warnings.** — AIM 1-1-18
 - **Satellites broadcast their position and the time the signal was sent.** — AIM 1-1-17. On screen, show coordinates and a clock, not "here I am".
+
+## Airspace (verified Nov 2026 against PHAK ch. 15, "Airspace", FAA-H-8083-25)
+- **Class A is generally from 18,000 ft MSL up to and including FL 600; unless otherwise authorized, all operations are IFR.** — PHAK ch. 15, Class A Airspace
+- **Class B is generally from the surface to 10,000 ft MSL around the nation's busiest airports; it has a surface area and two or more layers, and some Class B areas resemble upside-down wedding cakes. An ATC clearance is required to operate in it.** — PHAK ch. 15, Class B Airspace
+- **Class C is generally from the surface to 4,000 ft above the airport elevation around airports with an operational control tower and radar approach control; usually a 5 NM surface area and a 10 NM shelf from 1,200 to 4,000 ft. Aircraft must establish two-way radio communications before entering.** — PHAK ch. 15, Class C Airspace
+- **Class D is generally from the surface to 2,500 ft above the airport elevation around airports with an operational control tower. Unless otherwise authorized, aircraft must establish two-way radio communications before entering.** — PHAK ch. 15, Class D Airspace
+- **Class E is the controlled airspace not classified as A, B, C or D. "A large amount of the airspace over the United States is designated as Class E."** — PHAK ch. 15, Class E Airspace
+- **Class G (uncontrolled) is airspace not designated A–E; it extends from the surface to the base of the overlying Class E. VFR minimums still apply.** — PHAK ch. 15, Class G Airspace
+- **On sectional charts:** Class B is drawn in solid blue, Class C in solid magenta, Class D in dashed blue, and Class E (surface areas) in dashed magenta. — FAA Aeronautical Chart User's Guide. NEEDS SOURCE CHECK before it appears on screen as a claim.
