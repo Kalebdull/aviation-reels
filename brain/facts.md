@@ -43,3 +43,4 @@ Format: `- **Claim.** Detail. — Source`
 - **Class E is the controlled airspace not classified as A, B, C or D. "A large amount of the airspace over the United States is designated as Class E."** — PHAK ch. 15, Class E Airspace
 - **Class G (uncontrolled) is airspace not designated A–E; it extends from the surface to the base of the overlying Class E. VFR minimums still apply.** — PHAK ch. 15, Class G Airspace
 - **On sectional charts:** Class B is drawn in solid blue, Class C in solid magenta, Class D in dashed blue, and Class E (surface areas) in dashed magenta. — FAA Aeronautical Chart User's Guide. NEEDS SOURCE CHECK before it appears on screen as a claim.
+- **The Empire State Building is 1,454 ft to the antenna tip and 1,250 ft to the roof, so 10,000 ft is "more than six" of them stacked (6.9 to the tip, 8 to the roof).** — Wikipedia (tip); CTBUH Skyscraper Center (roof). Use "more than six".
