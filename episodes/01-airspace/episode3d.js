@@ -85,7 +85,7 @@ export default async function ({ THREE, scene, camera, world, load, props, T }) 
     { t: tHuge - 0.25, ...wide },                                                      // huge
     { t: t10k - 0.6, ...profile },                                                     // side view: ruler + skyscrapers
     { t: tDome - 0.4, pos: [-150, 420, 3300], look: [0, 330, 0], fov: 40 },            // the shape
-    { t: tUnder - 2.6, pos: [-1500, 120, 420], look: [-1000, 300, 200], fov: 46 },     // under the edge
+    { t: tUnder - 3.4, pos: [-1500, 120, 420], look: [-1000, 300, 200], fov: 46, d: 2.2 },   // under the edge (slow glide)
     { t: tEnd, ...wide },                                                              // the end: the whole cake
   ];
   const v3 = a => new THREE.Vector3(...a);
@@ -120,16 +120,23 @@ export default async function ({ THREE, scene, camera, world, load, props, T }) 
     const rp = rvAt(t), rn = rvAt(t + 0.05); rv.position.copy(rp);
     const yaw = Math.atan2(-(rn.z - rp.z), Math.max(0.01, rn.x - rp.x));       // nose follows the flight path
     rv.rotation.set(Math.sin(t * 0.7) * 0.03, Math.PI + yaw, 0.08 + Math.sin(t * 0.9) * 0.05 - yaw * 0.6);
-    rv.visible = t < tHuge + 0.3 || (t > tUnder - 3 && t < tWin + 0.2);
+    rv.visible = t < tHuge + 1.2 || (t > tUnder - 3 && t < tWin + 0.2);
     if (rvProp) rvProp.rotation.x = t * 45;
     // camera
     if (t >= tWin && t < tEnd) {                                               // inside the cabin, looking out the window
       const p = jetAt(t); const c = p.clone().add(new THREE.Vector3(6, 6, 7));
       camera.position.copy(c); camera.lookAt(c.clone().add(new THREE.Vector3(40, 18 - 3 * (t - tWin), -100))); camera.fov = 58;
     } else {
-      const k = T.cam(t, camKeys);
+      // camera: each move eases in and out (smootherstep: zero speed AND zero acceleration at both ends, so no jolts)
+      const k = (() => { const P = new THREE.Vector3(...camKeys[0].pos), L = new THREE.Vector3(...camKeys[0].look); let f = camKeys[0].fov || 40;
+        for (let i = 1; i < camKeys.length; i++) { const a = camKeys[i - 1], b = camKeys[i], d = b.d || 1.4; const u = M.clamp((t - b.t) / d, 0, 1), e = u * u * u * (u * (u * 6 - 15) + 10);
+          P.addScaledVector(new THREE.Vector3(...b.pos).sub(new THREE.Vector3(...a.pos)), e); L.addScaledVector(new THREE.Vector3(...b.look).sub(new THREE.Vector3(...a.look)), e); f += ((b.fov || 40) - (a.fov || 40)) * e; }
+        return { pos: P, look: L, fov: f }; })();
       let pos = k.pos, look = k.look;
-      if (t < tGated - 0.35) {                                           // hero chase: our RV-7 big in frame, then the bubble ahead of it
+      const ss = (a, b) => { const u = M.clamp((t - a) / (b - a), 0, 1); return u * u * (3 - 2 * u); };
+      // every follow-shot fades in and out with a weight (no hard switches between shots)
+      const wHero = 1 - ss(tGated - 0.7, tGated + 0.3), wGate = ss(tGated - 0.7, tGated + 0.3) * (1 - ss(tHuge - 0.8, tHuge + 0.5));
+      { const base = pos.clone(), baseLook = look.clone();                 // hero chase: our RV-7 big in frame, then the bubble ahead of it
         const r = rvOpen(t), w = M.clamp((t - (tBubble - 0.9)) / 1.3, 0, 1), e = w * w * (3 - 2 * w);
         // hero 3/4 shot from behind and above the left wing, the city and the bubble ahead of the nose
         const HO = [-125, 30, 72, 28, -22, -22];             // framed by measuring the RV-7 on screen: big, above the caption
@@ -138,15 +145,14 @@ export default async function ({ THREE, scene, camera, world, load, props, T }) 
         // foreground flying toward the bubble (lower third), the whole bubble ahead of it
         const target = new THREE.Vector3(-150, 200, -40), dir = r.clone().sub(target).normalize();
         const reveal = r.clone().addScaledVector(dir, 300).add(new THREE.Vector3(0, -20, 0)), revealLook = target.clone().add(new THREE.Vector3(0, -200, 0));
-        pos = hero.lerp(reveal, e); look = heroLook.lerp(revealLook, e);
+        const r2 = rvAt(t);                                               // close chase through the gate: RV-7 big, gate ahead
+        const gate = r2.clone().add(new THREE.Vector3(-150, 34, 120)), gateLook = r2.clone().lerp(G0.clone().add(new THREE.Vector3(60, 0, -60)), 0.5).add(new THREE.Vector3(0, -40, 0));
+        const hp = hero.lerp(reveal, e), hl = heroLook.lerp(revealLook, e);
+        pos = base.clone().multiplyScalar(1 - wHero - wGate).addScaledVector(hp, wHero).addScaledVector(gate, wGate);
+        look = baseLook.clone().multiplyScalar(1 - wHero - wGate).addScaledVector(hl, wHero).addScaledVector(gateLook, wGate);
       }
-      if (t >= tGated - 0.35 && t < tHuge - 0.25) {                       // close chase through the gate: RV-7 big, gate ahead
-        const r = rvAt(t), w = M.clamp((t - (tGated - 0.35)) / 0.8, 0, 1);
-        pos = pos.clone().lerp(r.clone().add(new THREE.Vector3(-150, 34, 120)), w);
-        look = look.clone().lerp(r.clone().lerp(G0.clone().add(new THREE.Vector3(60, 0, -60)), 0.5).add(new THREE.Vector3(0, -40, 0)), w);
-      }
-      if (t > tUnder - 2.2 && t < tWin) {                                // ride alongside the RV-7, looking up at the shelf
-        const r = rvAt(t); const w = M.clamp((t - (tUnder - 2.2)) / 0.7, 0, 1);
+      if (t > tUnder - 2.6 && t < tWin) {                                // ride alongside the RV-7, looking up at the shelf
+        const r = rvAt(t); const w = ss(tUnder - 2.6, tUnder - 1.4);
         pos = pos.clone().lerp(r.clone().add(new THREE.Vector3(-100, -10, 46)), w); look = look.clone().lerp(r.clone().add(new THREE.Vector3(40, 22, -6)), w);
       }
       pos = pos.clone().add(new THREE.Vector3(Math.sin(t * 0.21) * 25, Math.sin(t * 0.17) * 12, 0));   // the camera never stops
@@ -185,16 +191,19 @@ export default async function ({ THREE, scene, camera, world, load, props, T }) 
       UI.label(g, 'SMALL PLANES: UNDER THE EDGE', Math.max(260, Math.min(820, x)), Math.max(420, y - 170), t, tUnder - 0.3, { to: [x, y - 30], tOut: tWin - 0.25, bg: C.amber, color: C.ink, size: 30 });
     }
     // the window: cabin wall with a rounded window cut-out
-    if (t >= tWin && t < tEnd + 0.4) {
-      const a = M.clamp(T.in(t, tWin, 'snappy'), 0, 1) * T.out(t, tEnd, 'snappy');
-      const ww = 700 * (0.92 + 0.08 * a), wh = 960 * (0.92 + 0.08 * a), x0 = 540 - ww / 2, y0 = 820 - wh / 2;
+    if (t >= tWin - 0.4 && t < tEnd + 0.45) {
+      const sm = (a, b) => { const u = M.clamp((t - a) / (b - a), 0, 1); return u * u * (3 - 2 * u); };
+      const a = sm(tWin - 0.4, tWin) * (1 - sm(tEnd, tEnd + 0.4));           // the cabin wall fades in, covering the camera switch
+      const open = sm(tWin, tWin + 0.55) * (1 - sm(tEnd - 0.55, tEnd));     // then the window opens from nothing, and closes again
+      const ww = 700 * open, wh = 960 * open, x0 = 540 - ww / 2, y0 = 820 - wh / 2;
       g.save(); g.globalAlpha *= a;
       const rad = Math.min(300, ww / 2);
       g.beginPath(); g.rect(0, 0, W, HH);
-      g.moveTo(x0 + rad, y0); g.arcTo(x0 + ww, y0, x0 + ww, y0 + wh, rad); g.arcTo(x0 + ww, y0 + wh, x0, y0 + wh, rad); g.arcTo(x0, y0 + wh, x0, y0, rad); g.arcTo(x0, y0, x0 + ww, y0, rad); g.closePath();
+      if (open > 0.01) { g.moveTo(x0 + rad, y0); g.arcTo(x0 + ww, y0, x0 + ww, y0 + wh, rad); g.arcTo(x0 + ww, y0 + wh, x0, y0 + wh, rad); g.arcTo(x0, y0 + wh, x0, y0, rad); g.arcTo(x0, y0, x0 + ww, y0, rad); g.closePath(); }
       g.fillStyle = '#E9E4DA'; g.fill('evenodd');
+      if (open > 0.01) {
       g.lineWidth = 34; g.strokeStyle = '#D3CCBF'; D.rr(g, x0 - 10, y0 - 10, ww + 20, wh + 20, 310); g.stroke();
-      g.lineWidth = 8; g.strokeStyle = 'rgba(0,0,0,0.12)'; D.rr(g, x0 + 6, y0 + 6, ww - 12, wh - 12, 296); g.stroke();
+      g.lineWidth = 8; g.strokeStyle = 'rgba(0,0,0,0.12)'; D.rr(g, x0 + 6, y0 + 6, ww - 12, wh - 12, 296); g.stroke(); }
       g.restore();
       UI.slam(g, "YOU'RE INSIDE THE CAKE", 540, 470, t, tInside, tEnd - 0.2, { size: 38, bg: '#4F8DFF', color: '#FFFFFF' });
     }
@@ -205,5 +214,6 @@ export default async function ({ THREE, scene, camera, world, load, props, T }) 
     for (const x of [box.min.x, box.max.x]) for (const y of [box.min.y, box.max.y]) for (const z of [box.min.z, box.max.z]) { const q = proj(new THREE.Vector3(x, y, z)); xs.push(q[0]); ys.push(q[1]); }
     return [Math.round(Math.min(...xs)), Math.round(Math.min(...ys)), Math.round(Math.max(...xs)), Math.round(Math.max(...ys))];
   };
+  window.__camPath = (t0, t1, dt) => { const out = []; for (let t = t0; t <= t1; t += dt) { update(t); out.push([+t.toFixed(3), ...camera.position.toArray().map(v => +v.toFixed(1))]); } return out; };
   return { topic: 'Airspace', update, overlay, tail: 1.6 };
 }
