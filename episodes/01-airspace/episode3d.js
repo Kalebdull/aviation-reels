@@ -1,4 +1,4 @@
-export const config = { world: { flat: { x: 0, z: 0, r: 1500, y: 0, treeFree: 0.8 }, clouds: 26 } };
+export const config = { world: { flat: { x: 0, z: 0, r: 1500, y: 0, treeFree: 0.8 }, clouds: 26, cartoon: true } };
 
 // Ep 01: Airspace. One bubble over a big airport: gated neighbourhood, 10,000 ft (more than six Empire State
 // Buildings), dome → upside-down wedding cake, small planes underneath, "you're inside the cake".
@@ -14,6 +14,8 @@ export default async function ({ THREE, scene, camera, world, load, props, T }) 
   world.sun.shadow.camera.updateProjectionMatrix(); world.sun.shadow.mapSize.set(4096, 4096);
   world.sun.position.copy(world.sunDir).multiplyScalar(3000); world.sun.target.position.set(0, 0, 0);
 
+  // keep the opening shot clean: no clouds between the camera and the RV-7 / the city
+  world.clouds.children.forEach(c => { if (c.position.x < -600 && c.position.z > -1300) c.visible = false; });
   // ---------------- set: airport, city, tower
   const ap = props.airport({ len: 420 }); scene.add(ap.group);
   const city = props.city({ count: 260, inner: 430, outer: 1150, a0: 0.5, arc: 2.1, tall: 90 }); scene.add(city.group);   // the city sits off to the side, clear of the approach
@@ -56,14 +58,16 @@ export default async function ({ THREE, scene, camera, world, load, props, T }) 
   // airliner: cruises toward the bubble, waits at the gate's pace, glides in after permission
   const tGatePass = Math.max(tPerm + 1.2, S(3).t1 - 0.1);
   const jetAt = t => {
-    const x0 = -1950, xg = -905;
+    const x0 = -2700, xg = -905;
     const v1 = (xg - x0) / tGatePass;
     let x, y;
     if (t < tGatePass) { x = x0 + v1 * t; y = 520 - 70 * (t / tGatePass); }
     else { const u = t - tGatePass; x = xg + 64 * u; y = Math.max(28, 450 - 17.5 * u); }
     return new THREE.Vector3(x, y, -30);
   };
-  const rvAt = t => { const u = t - (tUnder - 2.2); return new THREE.Vector3(-1350 + 150 * u, 150 + 6 * Math.sin(u * 1.3), 230 - 10 * u); };
+  const rvUnder = t => { const u = t - (tUnder - 2.2); return new THREE.Vector3(-1350 + 150 * u, 150 + 6 * Math.sin(u * 1.3), 230 - 10 * u); };
+  const rvOpen = t => new THREE.Vector3(-1900 + 78 * t, 470 - 5 * t + 3 * Math.sin(t * 0.9), 140);          // the opening: our RV-7 heading for the city
+  const rvAt = t => (t < tGated ? rvOpen(t) : rvUnder(t));
 
   // ---------------- camera choreography (smooth camera spring between keys; the window shot is a cut)
   const wide = { pos: [-2300, 1300, 2700], look: [-60, 260, 0], fov: 38 };
@@ -112,7 +116,8 @@ export default async function ({ THREE, scene, camera, world, load, props, T }) 
     cake.traverse(o => { if (o.isMesh) o.material.opacity = cIn * (1 - 0.85 * merge); });
     // RV-7 under the edge
     const rp = rvAt(t); rv.position.copy(rp); rv.rotation.set(0, Math.PI + 0.06, Math.sin(t * 1.1) * 0.06);
-    rv.visible = t > tUnder - 3 && t < tWin + 0.2;
+    rv.visible = t < tGated - 0.1 || (t > tUnder - 3 && t < tWin + 0.2);
+    if (t < tGated) rv.rotation.set(Math.sin(t * 0.7) * 0.03, Math.PI + 0.04, 0.08 + Math.sin(t * 0.9) * 0.05);
     if (rvProp) rvProp.rotation.x = t * 45;
     // camera
     if (t >= tWin && t < tEnd) {                                               // inside the cabin, looking out the window
@@ -121,10 +126,13 @@ export default async function ({ THREE, scene, camera, world, load, props, T }) 
     } else {
       const k = T.cam(t, camKeys);
       let pos = k.pos, look = k.look;
-      if (t < tAir - 0.3) {                                              // close chase: the jet big in frame, the bubble ahead
-        const j = jetAt(t), w = M.clamp((t - (tBubble - 0.8)) / 1.2, 0, 1);
-        const chase = j.clone().add(new THREE.Vector3(-125 - 300 * w, 16 + 80 * w, 34 + 120 * w));
-        pos = chase; look = j.clone().add(new THREE.Vector3(40 + 760 * w, -2 - 60 * w, -4));
+      if (t < tAir - 0.3) {                                              // hero chase: our RV-7 big in frame, the city ahead
+        const r = rvOpen(t), w = M.clamp((t - (tBubble - 0.9)) / 1.3, 0, 1), e = w * w * (3 - 2 * w);
+        // hero 3/4 shot from behind and above the left wing, the city and the bubble ahead of the nose
+        const HO = [-125, 30, 72, 28, -22, -22];             // framed by measuring the RV-7 on screen: big, above the caption
+        const hero = r.clone().add(new THREE.Vector3(HO[0], HO[1], HO[2])), heroLook = r.clone().add(new THREE.Vector3(HO[3], HO[4], HO[5]));
+        const reveal = r.clone().add(new THREE.Vector3(-420, 150, 260)), revealLook = new THREE.Vector3(-300, 260, -30);
+        pos = hero.lerp(reveal, e); look = heroLook.lerp(revealLook, e);
       }
       if (t > tUnder - 2.2 && t < tWin) {                                // ride alongside the RV-7, looking up at the shelf
         const r = rvAt(t); const w = M.clamp((t - (tUnder - 2.2)) / 0.7, 0, 1);
@@ -181,5 +189,10 @@ export default async function ({ THREE, scene, camera, world, load, props, T }) 
     }
   }
 
+  window.__probe = t => { update(t); camera.updateMatrixWorld(); camera.updateProjectionMatrix();
+    const box = new THREE.Box3().setFromObject(rv), xs = [], ys = [];
+    for (const x of [box.min.x, box.max.x]) for (const y of [box.min.y, box.max.y]) for (const z of [box.min.z, box.max.z]) { const q = proj(new THREE.Vector3(x, y, z)); xs.push(q[0]); ys.push(q[1]); }
+    return [Math.round(Math.min(...xs)), Math.round(Math.min(...ys)), Math.round(Math.max(...xs)), Math.round(Math.max(...ys))];
+  };
   return { topic: 'Airspace', update, overlay, tail: 1.6 };
 }

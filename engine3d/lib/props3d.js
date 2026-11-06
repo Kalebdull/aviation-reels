@@ -108,7 +108,19 @@ export function skyscraper(h, o = {}) {
 export function city(o = {}) {
   const n = o.count || 600, R0 = o.inner || 280, R1 = o.outer || 900;
   const geo = new THREE.BoxGeometry(1, 1, 1); geo.translate(0, 0.5, 0);
-  const mat = new THREE.MeshStandardMaterial({ roughness: 0.6, color: '#FFFFFF' });
+  const mat = new THREE.MeshStandardMaterial({ roughness: 0.55, color: '#FFFFFF' });
+  mat.onBeforeCompile = sh => {      // window bands on the walls, a lighter roof, a warm glint in some windows
+    sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nvarying vec3 vWP; varying vec3 vWN;')
+      .replace('#include <worldpos_vertex>', '#include <worldpos_vertex>\nvWP = (modelMatrix * instanceMatrix * vec4(transformed, 1.0)).xyz; vWN = normalize(mat3(modelMatrix * instanceMatrix) * objectNormal);');
+    sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nvarying vec3 vWP; varying vec3 vWN;')
+      .replace('#include <color_fragment>', `#include <color_fragment>
+        float wall = 1.0 - step(0.6, abs(vWN.y));
+        float band = step(0.45, fract(vWP.y / 5.5)) * step(2.5, vWP.y);
+        float col = step(0.3, fract((vWP.x + vWP.z) / 4.0));
+        vec3 glass = mix(vec3(0.20, 0.30, 0.45), vec3(1.0, 0.82, 0.55), step(0.93, fract(sin(dot(floor(vWP.xz / 4.0) + floor(vWP.y / 5.5), vec2(12.9, 78.2))) * 43758.5)));
+        diffuseColor.rgb = mix(diffuseColor.rgb, glass, wall * band * col * 0.85);
+        diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * 1.12 + 0.05, step(0.6, vWN.y));`);
+  };
   const inst = new THREE.InstancedMesh(geo, mat, n);
   const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), c = new THREE.Color();
   const h = (i, k) => { const s = Math.sin(i * 127.1 + k * 311.7) * 43758.5453; return s - Math.floor(s); };
