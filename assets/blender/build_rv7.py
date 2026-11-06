@@ -47,7 +47,7 @@ def material(name, color, rough=0.4, metallic=0.0, coat=0.0, transmission=0.0, i
     b = m.node_tree.nodes['Principled BSDF']
     b.inputs['Base Color'].default_value = lin(color) if isinstance(color, str) else color
     b.inputs['Roughness'].default_value = rough; b.inputs['Metallic'].default_value = metallic
-    for k, v in (('Coat Weight', coat), ('Coat Roughness', 0.25), ('Transmission Weight', transmission), ('IOR', ior)):
+    for k, v in (('Coat Weight', coat), ('Coat Roughness', 0.04), ('Transmission Weight', transmission), ('IOR', ior)):
         if k in b.inputs: b.inputs[k].default_value = v
     if emission and 'Emission Color' in b.inputs:
         b.inputs['Emission Color'].default_value = lin(emission); b.inputs['Emission Strength'].default_value = estr
@@ -142,21 +142,43 @@ def loop(u0, u1, t, n=14, camber=0.018):
 # ================================================================ fuselage
 # station x, half-width, top, bottom  (RV-7: deep cabin, short cowl, slim tailcone)
 FUSE = [
-    (0.20, 0.28, 0.21, -0.29), (0.42, 0.41, 0.31, -0.40), (0.80, 0.51, 0.39, -0.45), (1.22, 0.56, 0.44, -0.46),
-    (1.70, 0.585, 0.47, -0.45), (2.40, 0.59, 0.49, -0.42), (3.00, 0.55, 0.57, -0.36), (3.80, 0.40, 0.50, -0.18),
-    (4.75, 0.25, 0.41, -0.02), (5.60, 0.12, 0.35, 0.08), (6.02, 0.035, 0.33, 0.13),
+    (0.20, 0.235, 0.16, -0.25), (0.45, 0.37, 0.265, -0.36), (0.85, 0.49, 0.36, -0.44), (1.25, 0.56, 0.43, -0.46),
+    (1.70, 0.585, 0.47, -0.45), (2.40, 0.59, 0.49, -0.42), (3.00, 0.555, 0.495, -0.36), (3.80, 0.40, 0.455, -0.18),
+    (4.75, 0.25, 0.395, -0.02), (5.60, 0.12, 0.35, 0.08), (6.02, 0.035, 0.33, 0.13),
 ]
 
 
 def fstation(x):
-    for i in range(len(FUSE) - 1):
-        if FUSE[i][0] <= x <= FUSE[i + 1][0]:
-            u = (x - FUSE[i][0]) / (FUSE[i + 1][0] - FUSE[i][0]); u = u * u * (3 - 2 * u)
-            return [FUSE[i][k] + (FUSE[i + 1][k] - FUSE[i][k]) * u for k in (1, 2, 3)]
-    return list(FUSE[-1][1:]) if x > FUSE[-1][0] else list(FUSE[0][1:])
+    """Half-width, top, bottom at station x: a Catmull-Rom spline through the stations (C1-smooth, no ripples)."""
+    S = FUSE
+    if x <= S[0][0]: return list(S[0][1:])
+    if x >= S[-1][0]: return list(S[-1][1:])
+    i = max(k for k in range(len(S) - 1) if S[k][0] <= x)
+    p0, p1, p2, p3 = S[max(0, i - 1)], S[i], S[i + 1], S[min(len(S) - 1, i + 2)]
+    u = (x - p1[0]) / (p2[0] - p1[0])
+    # tangents scaled by station spacing (non-uniform Catmull-Rom)
+    out = []
+    for k in (1, 2, 3):
+        m1 = (p2[k] - p0[k]) / (p2[0] - p0[0]) * (p2[0] - p1[0]) if p0 is not p1 else (p2[k] - p1[k])
+        m2 = (p3[k] - p1[k]) / (p3[0] - p1[0]) * (p2[0] - p1[0]) if p3 is not p2 else (p2[k] - p1[k])
+        h00, h10, h01, h11 = 2*u**3 - 3*u**2 + 1, u**3 - 2*u**2 + u, -2*u**3 + 3*u**2, u**3 - u**2
+        out.append(h00 * p1[k] + h10 * m1 + h01 * p2[k] + h11 * m2)
+    return out
 
 
-def fsection(x, n=56, k=2.8):
+def fsurf_z(x, y, k=3.3):
+    """Height of the fuselage's upper surface at station x, lateral offset y."""
+    hw, top, bot = fstation(x); mid, hh = (top + bot) / 2, (top - bot) / 2
+    c = min(0.999, abs(y) / hw) ** (k / 2); s_ = math.sqrt(max(0.0, 1 - c * c))
+    return mid + s_ ** (2 / k) * hh
+
+
+def canopy_h(u, H=0.34):
+    """Canopy height above the deck line along its length: steep raked windscreen, long low taper into the turtledeck."""
+    return H * math.sin(math.pi * max(0.0, min(1.0, u)) ** 0.72) ** 0.8
+
+
+def fsection(x, n=104, k=3.3):
     hw, top, bot = fstation(x); mid, hh = (top + bot) / 2, (top - bot) / 2
     out = []
     for j in range(n):
@@ -169,8 +191,9 @@ def fsection(x, n=56, k=2.8):
 def livery_material():
     m = bpy.data.materials.new('Livery'); m.use_nodes = True
     N, L = m.node_tree.nodes, m.node_tree.links
-    b = N['Principled BSDF']; b.inputs['Roughness'].default_value = 0.42
-    if 'Coat Weight' in b.inputs: b.inputs['Coat Weight'].default_value = 0.55
+    b = N['Principled BSDF']; b.inputs['Roughness'].default_value = 0.22
+    if 'Coat Weight' in b.inputs: b.inputs['Coat Weight'].default_value = 1.0
+    if 'Coat Roughness' in b.inputs: b.inputs['Coat Roughness'].default_value = 0.04
     tc = N.new('ShaderNodeTexCoord'); P = N.new('ShaderNodeSeparateXYZ'); L.new(tc.outputs['Object'], P.inputs[0])
     Nn = N.new('ShaderNodeSeparateXYZ'); L.new(tc.outputs['Normal'], Nn.inputs[0])
     def math(op, a, b=None, c=None):
@@ -207,9 +230,9 @@ def build():
     bpy.ops.wm.read_factory_settings(use_empty=True)
     sc = bpy.context.scene
     M = {
-        'body': material('Paint_Body', BODY, rough=0.42, coat=0.55),
-        'trim': material('Paint_Trim', TRIM, rough=0.4, coat=0.55),
-        'accent': material('Paint_Accent', ACCENT, rough=0.38, coat=0.55),
+        'body': material('Paint_Body', BODY, rough=0.22, coat=1.0),
+        'trim': material('Paint_Trim', TRIM, rough=0.22, coat=1.0),
+        'accent': material('Paint_Accent', ACCENT, rough=0.25, coat=1.0),
         'glass': material('Canopy', (0.80, 0.87, 0.94, 1), rough=0.02, transmission=1.0, ior=1.45),
         'lens': material('LightLens', (0.95, 0.97, 1.0, 1), rough=0.05, transmission=1.0, ior=1.5),
         'rubber': material('Rubber', '#1C1E22', rough=0.72),
@@ -232,7 +255,7 @@ def build():
         return e
 
     # ---------- fuselage: body paint, a white swoosh with a navy pinstripe, navy anti-glare panel ----------
-    n, xs = 56, [0.20 + (6.02 - 0.20) * i / 110 for i in range(111)]
+    n, xs = 104, [0.20 + (6.02 - 0.20) * i / 200 for i in range(201)]
     rings = [fsection(x, n) for x in xs]
 
     def fmat(i, j):
@@ -245,23 +268,24 @@ def build():
             if abs(s - centre) < width: return 1                                # white swoosh
             if abs(s - (centre - width - 0.035)) < 0.022: return 2              # navy pinstripe under it
         return 0
-    new_obj('Fuselage', loft(rings, closed=True, cap_start=True, cap_end=True), livery_material(), parent=root)
+    new_obj('Fuselage', loft(rings, closed=True, cap_start=True, cap_end=True), livery_material(), parent=root, sub=1)
 
     # ---------- canopy: a thin open glass shell (no lensing), windscreen frame + rear trim ----------
     cr = []
     for i in range(36):
         x = 1.50 + 1.66 * i / 35; u = (x - 1.50) / 1.66
-        h = 0.47 * (math.sin(math.pi * min(1.0, u / 0.62) * 0.5) if u < 0.62 else 1 - 0.88 * ((u - 0.62) / 0.38) ** 1.6)
-        hw, top, _ = fstation(x); w = hw * 0.93
-        cr.append([(x, math.cos(math.pi * j / 30) * w, top - 0.015 + math.sin(math.pi * j / 30) * max(0.015, h)) for j in range(31)])
+        h = canopy_h(u)
+        hw, top, _ = fstation(x); w = hw * 0.84; base = fsurf_z(x, w) - 0.006
+        hh_ = max(0.015, h + (top - base))                                             # bubble height measured from the sill
+        cr.append([(x, math.cos(math.pi * j / 30) * w, base + math.sin(math.pi * j / 30) ** 0.7 * hh_) for j in range(31)])
     new_obj('Canopy', loft(cr, closed=False), M['glass'], parent=root, solidify=0.004, sub=2)
     for jj in (0, 30):
         tube('CanopyRail', [r_[jj] for r_ in cr], 0.018, M['accent'], root)
-    for xf, name in ((1.86, 'WindscreenFrame'), (3.13, 'CanopyRearTrim')):
+    for xf, name in ((1.84, 'WindscreenFrame'),):
         u = (xf - 1.50) / 1.66
-        h = 0.47 * (math.sin(math.pi * min(1.0, u / 0.62) * 0.5) if u < 0.62 else 1 - 0.88 * ((u - 0.62) / 0.38) ** 1.6)
-        hw, top, _ = fstation(xf); w = hw * 0.94
-        tube(name, [(xf, math.cos(math.pi * j / 32) * w, top - 0.01 + math.sin(math.pi * j / 32) * h) for j in range(33)], 0.016, M['accent'], root)
+        h = canopy_h(u)
+        hw, top, _ = fstation(xf); w = hw * 0.85; base = fsurf_z(xf, w) - 0.004; hh_ = max(0.015, h + (top - base))
+        tube(name, [(xf, math.cos(math.pi * j / 32) * w, base + math.sin(math.pi * j / 32) ** 0.7 * hh_) for j in range(33)], 0.016, M['accent'], root)
 
     # ---------- interior: panel with two screens, two seats, two sticks ----------
     new_obj('Panel', prim('cube', scale=(0.14, 1.0, 0.26)), M['interior'], sub=1, parent=root, loc=(1.66, 0, 0.36))
@@ -273,17 +297,35 @@ def build():
         new_obj('StickGrip', prim('sphere', r=0.03), M['rubber'], sub=1, parent=root, loc=(2.06, y, 0.16))
 
     # ---------- cowling details: inlets, exhausts ----------
-    for y in (0.16, -0.16):
-        new_obj('CowlInlet', prim('sphere', r=1, u=24, v=12, scale=(0.05, 0.1, 0.075)), M['inlet'], sub=1, parent=root, loc=(0.215, y, 0.06))
+    for y in (0.19, -0.19):
+        # sporty round intakes: open oval mouths with thin lips, long cheeks flowing back into the cowl
+        R, r_, EZ = 0.064, 0.011, 0.78                     # mouth radius, lip radius, vertical squash (oval)
+        cx, cz = 0.215, 0.02
+        cheek = prim('sphere', r=1, u=48, v=24)
+        bmesh.ops.delete(cheek, geom=[v for v in cheek.verts if v.co.x < -0.05], context='VERTS')     # open at the front
+        for v in cheek.verts:
+            v.co.x *= 0.42; v.co.y *= R + r_; v.co.z *= (R + r_) * EZ
+        new_obj('IntakeCheek', cheek, M['body'], sub=1, parent=root, loc=(cx, y, cz))
+        lip = [[(r_ * math.sin(b), (R + r_ * math.cos(b)) * math.cos(a), (R + r_ * math.cos(b)) * math.sin(a) * EZ) for a in [2 * math.pi * k / 48 for k in range(48)]] for b in [2 * math.pi * k / 16 for k in range(17)]]
+        new_obj('IntakeLip', loft(lip, closed=True), M['body'], sub=1, parent=root, loc=(cx - 0.02, y, cz))
+        th = prim('cyl', r1=R, r2=R * 0.75, d=0.16, seg=40); bmesh.ops.scale(th, vec=(1, EZ, 1), verts=th.verts)
+        new_obj('IntakeThroat', th, M['inlet'], sub=1, parent=root, loc=(cx + 0.10, y, cz), rot=(0, math.pi / 2, 0))
+        # cut a real opening through the cowl so you look into the throat (boolean before the smoothing)
+        cut = prim('cyl', r1=R * 0.97, d=0.5, seg=48); bmesh.ops.scale(cut, vec=(1, EZ, 1), verts=cut.verts)
+        cutter = new_obj(f'IntakeCutter{"L" if y > 0 else "R"}', cut, M['inlet'], sub=0, parent=root, loc=(cx + 0.05, y, cz), rot=(0, math.pi / 2, 0))
+        cutter.display_type = 'WIRE'; cutter.hide_render = True
+        fus = bpy.data.objects['Fuselage']
+        bo = fus.modifiers.new(f'Intake{"L" if y > 0 else "R"}', 'BOOLEAN'); bo.operation = 'DIFFERENCE'; bo.object = cutter; bo.solver = 'EXACT'
+        fus.modifiers.move(len(fus.modifiers) - 1, 0)
         rod('Exhaust', (1.0, y * 0.8, -0.38), (1.12, y * 0.85, -0.54), 0.028, 0.028, M['exhaust'], root)
 
     # ---------- prop + spinner (spin about X) ----------
     prop = hinge('Prop', root, (0.04, 0, -0.04), (0, 0, 0), 'X', -1e9, 1e9, 'spins about X; ~2,400 rpm at cruise (animate 40 rad/s for a soft blur)')
     sp_rings = []
     for i in range(1, 17):
-        u = i / 16; r = 0.215 * math.sin(math.pi / 2 * u ** 0.7)
-        sp_rings.append([(-0.24 + 0.40 * u, r * math.cos(2 * math.pi * j / 32), r * math.sin(2 * math.pi * j / 32)) for j in range(32)])
-    new_obj('Spinner', loft(sp_rings, cap_start=True, cap_end=True), M['body'], parent=prop, loc=(-0.04, 0, 0))
+        u = i / 16; r = 0.165 * (1 - (1 - u) ** 2.4)                                  # pointed ogive, flush with the cowl lip
+        sp_rings.append([(-0.40 + 0.60 * u, r * math.cos(2 * math.pi * j / 48), r * math.sin(2 * math.pi * j / 48)) for j in range(48)])
+    new_obj('Spinner', loft(sp_rings, cap_start=True, cap_end=True), M['body'], parent=prop, loc=(-0.0, 0, 0), sub=1)
     for sgn in (1, -1):
         blade = []
         for i in range(13):                                             # tapered, slightly twisted blade
@@ -301,18 +343,18 @@ def build():
     zc = lambda y: Z0 + abs(y) * math.tan(DIH)
     FLAP = (0.60, 2.08); AIL = (2.13, 3.42); TIP = 3.44
 
-    def wing_ring(y, u0, u1, k=1.0, t=0.135, n=14):
+    def wing_ring(y, u0, u1, k=1.0, t=0.13, n=30):
         # k < 1 rounds the tip: chord shrinks from both ends, thickness follows
         c = CH * k; xle = XLE + (CH - c) * 0.45
         return [(xle + u * c, y, zc(y) + z * c) for (u, z) in loop(u0, u1, t * (0.55 + 0.45 * k), n)]
     for sgn, side in ((1, 'L'), (-1, 'R')):
-        ys = [sgn * (TIP * i / 30) for i in range(31)]
-        new_obj(f'Wing_{side}', loft([wing_ring(y, 0, F) for y in ys], cap_end=False), M['trim'], parent=root)
+        ys = [sgn * (TIP * i / 40) for i in range(41)]
+        new_obj(f'Wing_{side}', loft([wing_ring(y, 0, F) for y in ys], cap_end=False), M['trim'], parent=root, sub=1)
         tip_rings = []
-        for i in range(9):
-            y = sgn * (TIP + (HALF - TIP) * i / 8); q = i / 8
+        for i in range(13):
+            y = sgn * (TIP + (HALF - TIP) * i / 12); q = i / 12
             tip_rings.append(wing_ring(y, 0, 1, k=max(0.08, math.sqrt(max(0.0, 1 - q ** 2.2)))))
-        new_obj(f'WingTip_{side}', loft(tip_rings, cap_end=True), M['trim'], parent=root)
+        new_obj(f'WingTip_{side}', loft(tip_rings, cap_end=True), M['trim'], parent=root, sub=1)
         # control surfaces, built in hinge space: local X aft, local Y spanwise (outboard = sgn), local Z up
         for (y0, y1), kind, lim in ((FLAP, 'Flap', (0, 40)), (AIL, 'Aileron', (-20, 25))):
             ym = sgn * (y0 + y1) / 2
@@ -322,8 +364,8 @@ def build():
             rings_cs = []
             for i in range(9):
                 ys_ = sgn * (y0 + 0.004 + (y1 - y0 - 0.008) * i / 8)
-                rings_cs.append([((u - F) * CH, (ys_ - ym) / math.cos(DIH), (z - af(F, 0.135)[2]) * CH) for (u, z) in loop(F + 0.012, 1, 0.135, 10)])
-            new_obj(f'{kind}Panel_{side}', loft(rings_cs, cap_start=True, cap_end=True), M['trim'], parent=h)
+                rings_cs.append([((u - F) * CH, (ys_ - ym) / math.cos(DIH), (z - af(F, 0.135)[2]) * CH) for (u, z) in loop(F + 0.012, 1, 0.13, 16)])
+            new_obj(f'{kind}Panel_{side}', loft(rings_cs, cap_start=True, cap_end=True), M['trim'], parent=h, sub=1)
         # nav light (left red, right green), landing light, fuel cap
         new_obj(f'NavLight_{side}', prim('sphere', r=0.035, u=16, v=8), M['red'] if sgn > 0 else M['green'], sub=1, parent=root, loc=(XLE + 0.18, sgn * (HALF - 0.03), zc(HALF)))
         new_obj(f'LandingLight_{side}', prim('sphere', r=1, u=16, v=8, scale=(0.02, 0.09, 0.04)), M['lens'], sub=1, parent=root, loc=(XLE + 0.01, sgn * 3.05, zc(3.05) + 0.01))
@@ -336,17 +378,17 @@ def build():
     SX, SC, SH, SF, SZ = 5.30, 0.88, 1.25, 0.58, 0.215
     def stab_ring(y, u0, u1, k=1.0, local=None):
         c = SC * k; xle = SX + (SC - c) * 0.5
-        pts = [(xle + u * c, y, SZ + z * c) for (u, z) in loop(u0, u1, 0.11, 12, camber=0.0)]
+        pts = [(xle + u * c, y, SZ + z * c) for (u, z) in loop(u0, u1, 0.10, 24, camber=0.0)]
         if local: pts = [(px - local[0], py - local[1], pz - local[2]) for px, py, pz in pts]
         return pts
     elev = hinge('Elevator', root, (SX + SF * SC, 0, SZ), (0, 0, 0), 'Y', -25, 20, 'elevator: + = trailing edge up (stick back)')
     for sgn, side in ((1, 'L'), (-1, 'R')):
         ys = [sgn * (SH * i / 20) for i in range(21)]
         ks = [math.sqrt(max(0.06, 1 - max(0, (abs(y) - (SH - 0.2)) / 0.2) ** 2)) for y in ys]
-        new_obj(f'HStab_{side}', loft([stab_ring(y, 0, SF, k) for y, k in zip(ys, ks)], cap_end=True), M['trim'], parent=root)
+        new_obj(f'HStab_{side}', loft([stab_ring(y, 0, SF, k) for y, k in zip(ys, ks)], cap_end=True), M['trim'], parent=root, sub=1)
         ys2 = [sgn * (0.07 + (SH - 0.07) * i / 18) for i in range(19)]
         ks2 = [math.sqrt(max(0.06, 1 - max(0, (abs(y) - (SH - 0.2)) / 0.2) ** 2)) for y in ys2]
-        new_obj(f'ElevatorPanel_{side}', loft([stab_ring(y, SF + 0.015, 1, k, local=(SX + SF * SC, 0, SZ)) for y, k in zip(ys2, ks2)], cap_start=True, cap_end=True), M['trim'], parent=elev)
+        new_obj(f'ElevatorPanel_{side}', loft([stab_ring(y, SF + 0.015, 1, k, local=(SX + SF * SC, 0, SZ)) for y, k in zip(ys2, ks2)], cap_start=True, cap_end=True), M['trim'], parent=elev, sub=1)
     trim = hinge('TrimTab', elev, (SC * (0.88 - SF), 0.5, 0), (0, 0, 0), 'Y', -15, 15, 'elevator trim tab (left elevator), + = tab trailing edge up')
     new_obj('TrimTabPanel', loft([[(px - (SX + 0.88 * SC), py - 0.5, pz - SZ) for px, py, pz in stab_ring(y, 0.885, 1)] for y in (0.32 + 0.36 * i / 4 for i in range(5))], cap_start=True, cap_end=True), M['trim'], parent=trim)
 
@@ -357,8 +399,8 @@ def build():
         z = 0.30 + (1.16 - 0.30) * i / 19
         le = 4.92 + (z - 0.30) * 0.78
         c = (HX - le) / 0.985
-        fin_rings.append([(le + u * c, zz * c * 0.9, z) for (u, zz) in loop(0, 0.985, 0.10, 12, camber=0.0)])
-    new_obj('Fin', loft(fin_rings, cap_end=True), M['body'], parent=root)
+        fin_rings.append([(le + u * c, zz * c * 0.85, z) for (u, zz) in loop(0, 0.985, 0.095, 24, camber=0.0)])
+    new_obj('Fin', loft(fin_rings, cap_end=True), M['body'], parent=root, sub=1)
     rud = hinge('Rudder', root, (HX, 0, 0.12), (0, 0, 0), 'Z', -30, 30, 'rudder: rotate about local Z; + = trailing edge left (+Y)')
     rud_rings = []
     for i in range(26):
@@ -366,8 +408,8 @@ def build():
         aft = (0.36 + 0.06 * (z - 0.1)) * (1 if z < 1.2 else math.sqrt(max(0.05, 1 - ((z - 1.2) / 0.08) ** 2)))
         fwd = 0.0 if z < 1.17 else 0.15 * min(1, (z - 1.17) / 0.03) * (1 if z < 1.24 else math.sqrt(max(0.05, 1 - ((z - 1.24) / 0.04) ** 2)))
         c = aft + fwd + 0.02
-        rud_rings.append([(-fwd + u * c, zz * c * 0.8, z - 0.12) for (u, zz) in loop(0, 1, 0.12 if fwd > 0 else 0.09, 12, camber=0.0)])
-    new_obj('RudderPanel', loft(rud_rings, cap_start=True, cap_end=True), M['body'], parent=rud)
+        rud_rings.append([(-fwd + u * c, zz * c * 0.8, z - 0.12) for (u, zz) in loop(0, 1, 0.11 if fwd > 0 else 0.085, 24, camber=0.0)])
+    new_obj('RudderPanel', loft(rud_rings, cap_start=True, cap_end=True), M['body'], parent=rud, sub=1)
     new_obj('Strobe', prim('sphere', r=0.03, u=16, v=8), M['white'], sub=1, parent=rud, loc=(0.40, 0, 0.62))
     rod('Antenna', (3.75, 0, 0.49), (3.95, 0, 0.78), 0.012, 0.006, M['interior'], root)
 
@@ -375,10 +417,12 @@ def build():
     WX, WY, WZ, WR = 1.08, 0.97, -1.03, 0.17
     for sgn, side in ((1, 'L'), (-1, 'R')):
         rod(f'GearLeg_{side}', (1.28, sgn * 0.44, -0.43), (WX + 0.02, sgn * (WY - 0.1), WZ + 0.12), 0.05, 0.034, M['trim'], root)
-        pant = prim('sphere', r=1, u=40, v=20)
+        pant = prim('sphere', r=1, u=64, v=32)
         for v in pant.verts:
-            v.co.x *= 0.30 if v.co.x < 0 else 0.62; v.co.y *= 0.115; v.co.z *= 0.165 * (1 - 0.25 * max(0, v.co.x))
-        new_obj(f'WheelPant_{side}', pant, M['trim'], sub=2, parent=root, loc=(WX + 0.05, sgn * WY, WZ + 0.03))
+            aft = max(0.0, v.co.x); taper = 1 - 0.62 * aft ** 1.4                       # tapers to a narrow, rounded tail
+            v.co.x *= 0.27 if v.co.x < 0 else 0.68
+            v.co.y *= 0.105 * (taper if v.co.x > 0 else 1); v.co.z *= 0.155 * (taper if v.co.x > 0 else 1)
+        new_obj(f'WheelPant_{side}', pant, M['trim'], sub=1, parent=root, loc=(WX + 0.05, sgn * WY, WZ + 0.03))
         new_obj(f'Tire_{side}', prim('cyl', r1=WR, d=0.11, seg=32), M['rubber'], sub=1, parent=root, loc=(WX, sgn * WY, WZ), rot=(math.pi / 2, 0, 0))
     # 3-point attitude ≈ 11.5°: the tailwheel sits on the same ground line as the mains
     tw_x = 6.08; tw_ground = (WZ - WR) + (tw_x - WX) * math.tan(math.radians(11.5)); tw_r = 0.085
@@ -443,6 +487,8 @@ def studio(sc):
     area(sc, 'Fill', 260, (0.84, 0.9, 1.0), (-7, -8, 3), 9)
     area(sc, 'Rim', 520, (1.0, 0.92, 0.82), (12, 6, 5), 6)
     area(sc, 'Top', 220, (1.0, 1.0, 1.0), (3, 0, 10), 12)
+    for i, (loc, e) in enumerate((((-2, 6, 6), 380), ((6, 7, 7), 300), ((2, -7, 6), 260))):
+        st = area(sc, f'Strip{i}', e, (1, 1, 1), loc, 1); st.data.shape = 'RECTANGLE'; st.data.size, st.data.size_y = 9, 0.35
 
 
 def sky(sc):
@@ -488,13 +534,16 @@ def sky(sc):
 
 
 STUDIO_SHOTS = {
+    'studio_head_on': ((-4.2, 0.6, 0.25), (0.2, 0, -0.02)),
+    'studio_nose': ((-3.4, 2.0, 0.35), (0.3, 0, 0.0)),
+    'studio_close': ((-4.8, 4.2, 1.1), (1.2, 0, 0.1)),
     'studio_front34': ((-9.5, 10.5, 3.2), (2.9, 0, -0.1)),
     'studio_side': ((2.9, 17.0, 0.4), (2.9, 0, -0.05)),
     'studio_rear34': ((13.5, -10.0, 4.2), (3.0, 0, 0.0)),
     'studio_top': ((3.0, 0.01, 16.0), (3.0, 0, 0)),
     'studio_low': ((-7.5, 7.5, -0.95), (2.6, 0, 0.25)),
 }
-SKY_SHOTS = {'beauty': ((-13.0, 11.0, -1.9), (2.5, 0.0, 0.25))}
+SKY_SHOTS = {'beauty': ((-10.2, 8.6, -1.3), (2.3, 0.3, 0.2))}
 
 
 def render(sc, name, loc, look, lens=70):
@@ -510,7 +559,8 @@ if __name__ == '__main__':
     bpy.ops.wm.save_as_mainfile(filepath=os.path.join(OUT, 'rv7.blend'))
     json.dump(rig, open(os.path.join(OUT, 'rv7_rig.json'), 'w'), indent=1)
     try:
-        bpy.ops.export_scene.gltf(filepath=os.path.join(OUT, 'rv7.glb'), export_apply=True, export_yup=True)
+        [setattr(o, 'hide_viewport', True) for o in bpy.data.objects if o.name.startswith('IntakeCutter')]
+        bpy.ops.export_scene.gltf(filepath=os.path.join(OUT, 'rv7.glb'), export_apply=True, export_yup=True, use_visible=True)
     except Exception as e:
         print('glb export skipped:', e)
     if arg('pose'): pose(arg('pose'))
@@ -522,7 +572,7 @@ if __name__ == '__main__':
             for k, (loc, look) in STUDIO_SHOTS.items():
                 if not shots or shots == k or shots == 'studio': render(sc, k, loc, look, 85 if k != 'studio_top' else 50)
         if shots in ('beauty', None):
-            for o in [o for o in bpy.data.objects if o.name in ('Key', 'Fill', 'Rim', 'Top', 'Floor')]: bpy.data.objects.remove(o)
+            for o in [o for o in bpy.data.objects if o.name in ('Key', 'Fill', 'Rim', 'Top', 'Floor') or o.name.startswith('Strip')]: bpy.data.objects.remove(o)
             sky(sc)
             setup_render(sc, (1080, 1920))
             for k, (loc, look) in SKY_SHOTS.items(): render(sc, k, loc, look, 70)
