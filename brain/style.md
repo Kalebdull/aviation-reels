@@ -59,3 +59,12 @@ Never use coral for anything good or teal for anything bad. Viewers learn the co
 
 ## Frame 0
 Frame 0 is the thumbnail, the first impression and the loop seam. It already shows the payoff composition (or the hook's question) **in motion**, with the hook keyword visible. Never blank, never static.
+
+## The show's airplane (locked Nov 2026): our RV-7
+Every episode uses the same airplane, so viewers recognise it: a **sporty, slick RV-7 taildragger**.
+- **Model:** `assets/blender/build_rv7.py` builds it in Blender, writing `assets/models/rv7.blend` and `assets/models/rv7.glb`. Never redraw it by hand; change the script and re-run.
+- **Shape:** a tall, slim fuselage with a low, broad **tinted canopy grown out of the skin** (no bubble), a wide blunt cowl with **two big round intakes**, a pointed gloss-black spinner, a slim belly that tucks under, teardrop wheel pants, a tall fin.
+- **Livery:** metallic **blue** top, **white** belly, wings and gear, a rising **speed swoosh** (thin white, bold black, **amber** pinstripe), blue wingtips, and a black + amber **slash across the fin and rudder**.
+- **Moving parts** (`assets/models/rv7_rig.json`): ailerons, flaps, elevator, trim tab, rudder, prop and tailwheel, each with its hinge axis and limits. Teaching moments show the real surface moving.
+- **Renders:** `python3 assets/blender/build_rv7.py --preview --shot=studio|beauty` (Cycles). Full episodes render faster on a Mac GPU.
+- No registration number, no manufacturer logos.
