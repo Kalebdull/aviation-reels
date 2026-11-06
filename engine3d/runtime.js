@@ -77,6 +77,10 @@ window.READY = (async () => {
     if (window.BRAND && BRAND.header !== false && !ep.noHeader) UI.header(g2, BRAND.series, ep.topic);
     if (!NOCAPS) UI.captions(g2, t, window.TIMING, ep.captionStyle || {});
   };
+  // exact frame capture: draw the 3D canvas + the overlay into one canvas right after rendering, in the same task
+  // (a page screenshot can catch the PREVIOUS WebGL frame, which duplicates/skips frames and looks like shaking)
+  const grabC = document.createElement('canvas'); grabC.width = W; grabC.height = H; const grabG = grabC.getContext('2d');
+  window.grab = (t, q = 0.94) => { window.seek(t); grabG.drawImage(renderer.domElement, 0, 0); grabG.drawImage(overlay, 0, 0); return grabC.toDataURL('image/jpeg', q).split(',')[1]; };
   window.seek(0);
   return true;
 })();

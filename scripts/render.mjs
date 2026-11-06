@@ -47,6 +47,7 @@ async function openPage() {
   return { page, cdp: await ctx.newCDPSession(page) };
 }
 async function shoot(p, t, format = 'jpeg') {
+  if (IS3D && format === 'jpeg') return Buffer.from(await p.page.evaluate(tt => window.grab(tt), t), 'base64');
   await p.page.evaluate(tt => window.seek(tt), t);
   const r = await p.cdp.send('Page.captureScreenshot', { format, quality: format === 'jpeg' ? 94 : undefined, optimizeForSpeed: true });
   return Buffer.from(r.data, 'base64');
