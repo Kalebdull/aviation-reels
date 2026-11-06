@@ -1,3 +1,0 @@
-human_male_stylized.blend: extracted from Blender Studio's "Human Base Meshes" asset bundle v1.4.1
-(https://download.blender.org/demo/asset-bundles/human-base-meshes/). Licensed CC0 1.0 (public domain):
-free to use, modify and publish, commercially included, no attribution required.

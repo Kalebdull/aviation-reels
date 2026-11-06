@@ -22,8 +22,9 @@ After each post, Kaleb shares the numbers (views, average watch time, retention 
   6. A community ending: "What should we break down next?" → comments.
   7. About 95 words in 32 s, roughly 3 words a second.
 - **VOR TO/FROM flag (escalator).** A familiar physical analogy (facing ≠ going) carried the whole idea before any instrument appeared.
-- **Direction from Kaleb (Nov 2026):** keep that clarity, but make it feel like a **cartoon show**: super flowing, good graphics everyone loves to watch. A living world the camera travels through, characters with a little personality, weather that moves, planes that bank into their turns.
+- **Direction from Kaleb (Nov 2026):** keep that clarity, but make it feel like a **cartoon show**: super flowing, good graphics everyone loves to watch. A living world the camera travels through, weather that moves, planes that bank into their turns.
 
 ## Aviation Reels (Instagram)
-- **2026-11 · Audience is ~35, not kids (Kaleb).** A chubby toy plane with eyes in the windshield "looks like it's made for 2 year olds". Wholesome and for every age, yes, but designed for adults: **no faces on aircraft, no toy proportions, no candy primary colours.** Charm comes from cinematic lighting, believable detail, human characters and situations, and wit, not baby shapes.
+- **2026-11 · No host character (Kaleb).** We tried a code-built CFI and dropped it. The airplane and the world are the stars; the voice teaches.
+- **2026-11 · Audience is ~35, not kids (Kaleb).** A chubby toy plane with eyes in the windshield "looks like it's made for 2 year olds". Wholesome and for every age, yes, but designed for adults: **no faces on aircraft, no toy proportions, no candy primary colours.** Charm comes from cinematic lighting, believable detail, situations and wit, not baby shapes.
 <!-- 2026-11-xx · Ep 1 <topic> · views / avg watch / 3 s hold / saves / sends → change -->

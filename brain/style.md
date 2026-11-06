@@ -37,9 +37,9 @@ Never use coral for anything good or teal for anything bad. Viewers learn the co
 
 ## Motion (the "flowy" part)
 - **Springs only** (`engine/lib/motion.js`). There are no easing curves and no linear moves except constant-speed things: flight, flow dots and clouds.
-  - `snappy`: pops, labels, toggles. `default`: cards, camera, needles (a tiny overshoot reads as mechanical). `heavy`: big type, slow reveals, the logo (no overshoot). `playful`: characters only.
+  - `snappy`: pops, labels, toggles. `default`: cards, camera, needles (a tiny overshoot reads as mechanical). `heavy`: big type, slow reveals, the logo (no overshoot). `playful`: rarely, for a light moment.
 - **The camera never stops.** Every shot has a slow drift, push or float. Camera moves use the camera spring in `T.cam()` (critically damped, about 0.7 s): glide, never jerk.
-- **Everything idles.** Propellers spin, clouds drift, flow dots travel, characters breathe, stars twinkle. A held frame still feels alive.
+- **Everything idles.** Propellers spin, clouds drift, flow dots travel, windsocks flap, stars twinkle. A held frame still feels alive.
 - **Secondary motion.** When something lands, something nearby reacts: a needle settles, a label follows half a beat later, a little bob.
 - **Transitions are camera moves, not effects.** In order of preference:
   1. **Same shot, camera flies** to the next subject (best: one continuous world).
@@ -69,11 +69,5 @@ Every episode uses the same airplane, so viewers recognise it: a **sporty, slick
 - **Renders:** `python3 assets/blender/build_rv7.py --preview --shot=studio|beauty` (Cycles). Full episodes render faster on a Mac GPU.
 - No registration number, no manufacturer logos.
 
-## The show's CFI (direction locked Nov 2026)
-A lovable, confident flight instructor in his early-to-mid 30s, from Kaleb's reference picture:
-- **Face:** clean-shaven, square jaw, a warm open smile, blue-grey eyes.
-- **Hair:** a dark brown swept-up pompadour, thick dark brows.
-- **Gold aviators** worn on the face.
-- **Uniform:** navy jacket with four gold captain bars on the cuffs and epaulettes, gold wings on the chest, white shirt, dark tie.
-- **Personality:** a calm, warm mentor with a confident ace's ease. No name.
-- **Build:** work in progress in `assets/blender/build_cfi.py` (on a CC0 base mesh). Pixar-level appeal may need an image-to-3D tool fed the reference picture, then rigging here.
+## No host character (decided Nov 2026)
+The show has **no recurring character or CFI**. The RV-7, the world it flies through and the working instruments carry every episode, and the voice is the teacher. Don't add people as the stars; a small figure can appear for scale or an everyday analogy only if a lesson truly needs it.
