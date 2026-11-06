@@ -68,3 +68,12 @@ Every episode uses the same airplane, so viewers recognise it: a **sporty, slick
 - **Moving parts** (`assets/models/rv7_rig.json`): ailerons, flaps, elevator, trim tab, rudder, prop and tailwheel, each with its hinge axis and limits. Teaching moments show the real surface moving.
 - **Renders:** `python3 assets/blender/build_rv7.py --preview --shot=studio|beauty` (Cycles). Full episodes render faster on a Mac GPU.
 - No registration number, no manufacturer logos.
+
+## The show's CFI (direction locked Nov 2026)
+A lovable, confident flight instructor in his early-to-mid 30s, from Kaleb's reference picture:
+- **Face:** clean-shaven, square jaw, a warm open smile, blue-grey eyes.
+- **Hair:** a dark brown swept-up pompadour, thick dark brows.
+- **Gold aviators** worn on the face.
+- **Uniform:** navy jacket with four gold captain bars on the cuffs and epaulettes, gold wings on the chest, white shirt, dark tie.
+- **Personality:** a calm, warm mentor with a confident ace's ease. No name.
+- **Build:** work in progress in `assets/blender/build_cfi.py` (on a CC0 base mesh). Pixar-level appeal may need an image-to-3D tool fed the reference picture, then rigging here.
