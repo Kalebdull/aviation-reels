@@ -43,12 +43,22 @@ export async function loadRV7(load, url = '/assets/models/rv7.glb') {
     o.castShadow = true; o.receiveShadow = true;
     const n = o.material && o.material.name;
     if (n === 'Livery') o.material = paint(o.material, LIVERY);
-    else if (n === 'FinLivery') {
+    else if (n && n.startsWith('FinLivery')) {
       const inRudder = (() => { let p = o.parent; while (p) { if (p.name === 'Rudder') return true; p = p.parent; } return false; })();
       o.material = paint(o.material, inRudder ? fin(5.86, 0.12) : fin(0, 0));
     } else if (n === 'CanopyTint') {
       o.material = new THREE.MeshPhysicalMaterial({ color: '#2B3340', roughness: 0.02, metalness: 0.2, transparent: true, opacity: 0.55, clearcoat: 1 });
     }
   });
-  return { group: rv, prop: rv.getObjectByName('Prop') };
+  // a spinning prop filmed at 30 fps strobes (blades jump to random angles every frame), so show it the way a
+  // camera does: a soft translucent disc with a faint tip ring, the blades hidden
+  const prop = rv.getObjectByName('Prop');
+  if (prop) {
+    prop.traverse(o => { if (o.isMesh && /Blade/i.test(o.name)) o.visible = false; });
+    const disc = new THREE.Mesh(new THREE.CircleGeometry(0.92, 64), new THREE.MeshBasicMaterial({ color: '#3A3F4A', transparent: true, opacity: 0.16, side: THREE.DoubleSide, depthWrite: false }));
+    disc.rotation.y = Math.PI / 2; prop.add(disc);
+    const ring = new THREE.Mesh(new THREE.RingGeometry(0.86, 0.92, 64), new THREE.MeshBasicMaterial({ color: '#E8EAEE', transparent: true, opacity: 0.22, side: THREE.DoubleSide, depthWrite: false }));
+    ring.rotation.y = Math.PI / 2; prop.add(ring);
+  }
+  return { group: rv, prop };
 }

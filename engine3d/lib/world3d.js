@@ -40,8 +40,9 @@ vec3 cartoonGround(vec2 p, float flatR){
   vec3 col = pal[int(hc * 7.99)];
   // crop rows in about half the fields
   float ang = h21(cell + 3.1) * 3.14159;
-  float rows = sin((f.x * cos(ang) + f.y * sin(ang)) * 70.0);
-  col *= (h21(cell + 9.7) > 0.45) ? (0.94 + 0.06 * step(0.0, rows)) : 1.0;
+  float ph = (f.x * cos(ang) + f.y * sin(ang)) * 70.0;
+  float aa = 1.0 - smoothstep(0.4, 1.6, fwidth(ph));            // fade the crop rows out where they'd shimmer
+  col *= (h21(cell + 9.7) > 0.45) ? (1.0 - 0.06 * aa * (0.5 + 0.5 * sin(ph))) : 1.0;
   col *= 0.95 + 0.1 * vn(p * 0.05);
   // hedgerows between fields
   float e = min(min(f.x, 1.0 - f.x), min(f.y, 1.0 - f.y));
