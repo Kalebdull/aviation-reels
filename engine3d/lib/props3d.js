@@ -96,11 +96,11 @@ export function airport(o = {}) {
 
 export function skyscraper(h, o = {}) {
   // art-deco setbacks: base, three set-back blocks, a crown, a spire (≈ Empire State proportions; spire ≈ 14 % of the total)
-  const g = new THREE.Group(), m = o.material || phys('#D9D2C3', { roughness: 0.6 });
+  const g = new THREE.Group(), m = o.material || phys('#D9D2C3', { roughness: 0.6 }), wf = o.wide || 1;
   const parts = [[0.30, 0.42, 0.06], [0.36, 0.30, 0.07], [0.62, 0.24, 0.55], [0.74, 0.17, 0.12], [0.80, 0.11, 0.06], [0.86, 0.07, 0.06]];
   let y = 0;
-  for (const [, w, f] of parts) { const hh = f * h; const b = new THREE.Mesh(new THREE.BoxGeometry(w * h * 0.5, hh, w * h * 0.5), m); b.position.y = y + hh / 2; g.add(b); y += hh; }
-  const sp = new THREE.Mesh(new THREE.ConeGeometry(0.012 * h, h - y, 8), m); sp.position.y = y + (h - y) / 2; g.add(sp);
+  for (const [, w, f] of parts) { const hh = f * h; const b = new THREE.Mesh(new THREE.BoxGeometry(w * h * 0.5 * wf, hh, w * h * 0.5 * wf), m); b.position.y = y + hh / 2; g.add(b); y += hh; }
+  const sp = new THREE.Mesh(new THREE.ConeGeometry(0.012 * h * wf, h - y, 8), m); sp.position.y = y + (h - y) / 2; g.add(sp);
   shadow(g);
   return g;
 }
@@ -117,9 +117,9 @@ export function city(o = {}) {
     const a = (o.a0 ?? 0.5) + h(i, 1) * (o.arc ?? 2.2), r = R0 + (R1 - R0) * Math.sqrt(h(i, 2));
     const x = (o.cx || 0) + Math.cos(a) * r, z = (o.cz || 0) + Math.sin(a) * r;
     const core = 1 - Math.min(1, (r - R0) / (R1 - R0));
-    const w = 12 + h(i, 3) * 18, ht = 10 + Math.pow(h(i, 4), 2.2) * (40 + 150 * core);
+    const w = 10 + h(i, 3) * 16, ht = 8 + Math.pow(h(i, 4), 2.6) * (25 + (o.tall ?? 110) * core);
     m4.compose(new THREE.Vector3(x, 0, z), q.setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.round(h(i, 5) * 4) * Math.PI / 2 + 0.08), new THREE.Vector3(w, ht, w * (0.7 + 0.6 * h(i, 6))));
-    inst.setMatrixAt(k, m4); inst.setColorAt(k, c.setHSL(0.58 + h(i, 7) * 0.08, 0.12, 0.62 + h(i, 8) * 0.22)); k++;
+    inst.setMatrixAt(k, m4); inst.setColorAt(k, c.setHSL(0.07 + h(i, 7) * 0.06, 0.18 + h(i, 9) * 0.12, 0.62 + h(i, 8) * 0.2)); k++;
   }
   inst.count = k; inst.castShadow = true; inst.receiveShadow = true;
   return { group: inst };
@@ -145,23 +145,22 @@ export function airspace(o = {}) {
     if (u < 0.3) dome.push([Rd * (u / 0.3), 0]);
     else { const a = (u - 0.3) / 0.7 * Math.PI / 2; dome.push([Rd * Math.cos(a), H * 1.05 * Math.sin(a)]); }
   }
-  const mat = new THREE.MeshPhysicalMaterial({ color: o.color || '#4F8DFF', transparent: true, opacity: 0.22, roughness: 0.15, metalness: 0, clearcoat: 1, side: THREE.DoubleSide, depthWrite: false, emissive: new THREE.Color(o.color || '#4F8DFF'), emissiveIntensity: 0.25 });
-  const edgeMat = new THREE.LineBasicMaterial({ color: o.edge || '#BFD7FF', transparent: true, opacity: 0.9 });
+  const mat = new THREE.MeshPhysicalMaterial({ color: o.color || '#4F8DFF', transparent: true, opacity: 0.30, roughness: 0.15, metalness: 0, clearcoat: 1, side: THREE.DoubleSide, depthWrite: false, emissive: new THREE.Color(o.color || '#4F8DFF'), emissiveIntensity: 0.45 });
+  const edgeMat = new THREE.MeshBasicMaterial({ color: o.edge || '#BFD7FF', transparent: true, opacity: 0.95, depthWrite: false, fog: false });
   const g = new THREE.Group(); let mesh = null, rims = new THREE.Group(); g.add(rims);
   function set(morph = 1, opacity = 1) {
     const pts = C.map((c, k) => new THREE.Vector2(Math.max(0.01, dome[k][0] + (c[0] - dome[k][0]) * morph), dome[k][1] + (c[1] - dome[k][1]) * morph));
     if (mesh) { mesh.geometry.dispose(); g.remove(mesh); }
     mesh = new THREE.Mesh(new THREE.LatheGeometry(pts, 128), mat); mesh.renderOrder = 5; g.add(mesh);
-    mat.opacity = 0.22 * opacity; mat.emissiveIntensity = 0.25 * opacity;
+    mat.opacity = 0.30 * Math.min(1, opacity); mat.emissiveIntensity = 0.45 * opacity;
     // glowing rings at each tier edge (top and bottom of every step), fade with the morph
     rims.clear();
     const rings = morph > 0.02 ? tiers.flatMap(([r, f]) => [[r, f], [r, H]]) : [[Rd, 0]];
     for (const [r, y] of rings) {
       const rr = morph > 0.02 ? r : Rd, yy = morph > 0.02 ? y : 0;
-      const pts2 = []; for (let a = 0; a <= 128; a++) pts2.push(new THREE.Vector3(Math.cos(a / 128 * Math.PI * 2) * rr, yy, Math.sin(a / 128 * Math.PI * 2) * rr));
-      const ln = new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts2), edgeMat); rims.add(ln);
+      const ring = new THREE.Mesh(new THREE.TorusGeometry(rr, o.edgeW || 4, 8, 160), edgeMat); ring.rotation.x = Math.PI / 2; ring.position.y = yy; ring.renderOrder = 6; rims.add(ring);
     }
-    edgeMat.opacity = 0.9 * opacity * Math.max(0.25, morph);
+    edgeMat.opacity = Math.min(1, 0.95 * opacity) * Math.max(0.3, morph);
   }
   set(1, 1);
   return { group: g, set, H, tiers };

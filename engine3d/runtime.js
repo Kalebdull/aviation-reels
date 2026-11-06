@@ -56,12 +56,12 @@ window.READY = (async () => {
     try { const ff = new FontFace('Inter', `url(/assets/fonts/Inter-${f}.otf)`, { weight: String(w) }); document.fonts.add(await ff.load()); } catch (e) { console.warn('font', f); }
   }
   try { await loadScript(`/episodes/${slug}/timing.js`); } catch (e) { window.TIMING = null; console.warn('no timing.js'); }
-  const world = buildWorld(renderer, { look: 'golden', clouds: 22 });
+  const mod = await import(`/episodes/${slug}/episode3d.js`);
+  const world = buildWorld(renderer, { look: 'golden', clouds: 22, ...((mod.config && mod.config.world) || {}) });
   const camera = new THREE.PerspectiveCamera(40, W / H, 0.5, 9000);
   const gltf = new GLTFLoader();
   const load = url => new Promise((res, rej) => gltf.load(url, g => res(g.scene), undefined, rej));
   const T = makeT(window.TIMING);
-  const mod = await import(`/episodes/${slug}/episode3d.js`);
   const ep = await mod.default({ THREE, scene: world.scene, camera, renderer, world, load, props, T });
   const last = T.segs.length ? T.segs[T.segs.length - 1].t1 : 10;
   const D = +(last + (ep.tail ?? 1.2)).toFixed(3); T.dur = D;

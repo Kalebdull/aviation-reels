@@ -21,20 +21,28 @@ const slug = argv[0] && !argv[0].startsWith('--') ? argv[0].replace(/^episodes\/
 if (!slug) { console.error('usage: node scripts/render.mjs <episode-slug> [--draft|--stills shots|--nocaps|--cues-only]'); process.exit(1); }
 const opt = (n, d) => { const i = argv.indexOf('--' + n); return i < 0 ? d : (argv[i + 1] && !argv[i + 1].startsWith('--') ? argv[i + 1] : true); };
 const EP = path.join(ROOT, 'episodes', slug);
-if (!fs.existsSync(path.join(EP, 'episode.js'))) { console.error(`no ${EP}/episode.js`); process.exit(1); }
+const IS3D = fs.existsSync(path.join(EP, 'episode3d.js'));
+if (!IS3D && !fs.existsSync(path.join(EP, 'episode.js'))) { console.error(`no ${EP}/episode.js or episode3d.js`); process.exit(1); }
 const draft = !!opt('draft', false), nocaps = !!opt('nocaps', false), stillsArg = opt('stills', null), cuesOnly = !!opt('cues-only', false);
-const fps = +opt('fps', draft ? 30 : 60), sub = draft ? 1 : +opt('sub', 2), shutter = +opt('shutter', 0.5), workers = +opt('workers', 6);
+const fps = +opt('fps', draft ? 30 : (IS3D ? 30 : 60)), sub = draft ? 1 : +opt('sub', IS3D ? 1 : 2), shutter = +opt('shutter', 0.5), workers = +opt('workers', 6);
 const scale = draft ? 0.5 : 1;
 const outFile = path.resolve(opt('out', path.join(EP, 'out', draft ? 'draft.mp4' : nocaps ? 'video_nocaps.mp4' : 'video.mp4')));
-const url = pathToFileURL(path.join(ROOT, 'engine', 'index.html')).href + `?ep=${encodeURIComponent(slug)}&render${nocaps ? '&nocaps' : ''}`;
-
-const browser = await chromium.launch();
+let url = pathToFileURL(path.join(ROOT, 'engine', 'index.html')).href + `?ep=${encodeURIComponent(slug)}&render${nocaps ? '&nocaps' : ''}`;
+let server = null;
+if (IS3D) {   // 3D episodes: ES modules need http, WebGL needs the software GPU flags here
+  const { serve } = await import(pathToFileURL(path.join(ROOT, 'engine3d', 'serve.mjs')).href);
+  const s = await serve(); server = s.server;
+  url = `http://localhost:${s.port}/engine3d/episode.html?ep=${encodeURIComponent(slug)}&render${nocaps ? '&nocaps' : ''}`;
+}
+const browser = await chromium.launch({ args: IS3D ? ['--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--use-angle=swiftshader'] : [] });
+process.on('exit', () => { if (server) server.close(); });
 async function openPage() {
   const ctx = await browser.newContext({ viewport: { width: 1080, height: 1920 }, deviceScaleFactor: scale });
   const page = await ctx.newPage();
   page.on('console', m => { if (['warning', 'error'].includes(m.type())) console.log(`  [page ${m.type()}] ${m.text()}`); });
   page.on('pageerror', e => console.error('  [page error]', e.message));
   await page.goto(url);
+  await page.waitForFunction(() => window.READY, null, { timeout: 300000 });
   await page.evaluate(() => window.READY);
   return { page, cdp: await ctx.newCDPSession(page) };
 }
@@ -49,7 +57,7 @@ const info = await first.page.evaluate(() => ({ D: window.DURATION, cues: window
 fs.mkdirSync(path.join(EP, 'audio'), { recursive: true });
 fs.writeFileSync(path.join(EP, 'audio', 'cues.json'), JSON.stringify({ duration: info.D, cues: info.cues }, null, 1));
 console.log(`${slug}: ${info.D.toFixed(2)} s, ${info.shots.length} shots, ${info.cues.length} sfx cues`);
-if (cuesOnly) { await browser.close(); process.exit(0); }
+if (cuesOnly) { await browser.close(); if (server) server.close(); process.exit(0); }
 
 if (stillsArg) {
   const dir = path.join(EP, 'out', 'stills');
@@ -63,7 +71,7 @@ if (stillsArg) {
     const f = path.join(dir, `${String(i).padStart(2, '0')}_${t.toFixed(2)}s.png`);
     fs.writeFileSync(f, await shoot(first, t, 'png')); files.push(f);
   }
-  await browser.close();
+  await browser.close(); if (server) server.close();
   const sheet = path.join(EP, 'out', stillsArg === 'shots' ? 'shots.png' : 'stills.png');
   spawnSync('python3', [path.join(ROOT, 'scripts', 'sheet.py'), sheet, ...files], { stdio: 'inherit' });
   process.exit(0);
@@ -97,5 +105,5 @@ for (let i = 0; i < times.length; i += BATCH) {
   const line = `frame ${Math.round(fr)}/${nFrames}  ${(fr / el).toFixed(1)} fps  eta ${Math.round((nFrames - fr) / (fr / el))}s`;
   if (process.stdout.isTTY) process.stdout.write(`\r  ${line}   `); else if (pct !== lastPct) { console.log('  ' + line); lastPct = pct; }
 }
-ff.stdin.end(); await done; await browser.close();
+ff.stdin.end(); await done; await browser.close(); if (server) server.close();
 console.log(`\nvideo → ${path.relative(ROOT, outFile)}  (${nFrames} frames @ ${fps} fps, ${sub} subframes, ${((Date.now() - t0) / 1000).toFixed(0)} s)`);

@@ -33,8 +33,12 @@
       const a = M.clamp(M.spring(t - tIn, 'snappy'), 0, 1) * (1 - M.clamp(M.spring(t - tOut, 'snappy'), 0, 1));
       if (a < 0.002) continue;
       const toks = parse(cap);
-      const size = o.size || 60, maxW = o.maxW || 760;   // 160–920: clear of the right action rail
-      const lines = D.balance(g, toks.map(k => k.w), maxW, size, 800, 3);
+      const maxW = o.maxW || 760;   // 160–920: clear of the right action rail
+      let size = o.size || 60, lines = D.balance(g, toks.map(k => k.w), maxW, size, 800, 3);
+      for (const [sz, ml] of [[54, 3], [50, 4], [44, 4]]) {          // long lines: shrink a little rather than overflow
+        if (Math.max(...lines.map(l => D.measure(g, l.join(' '), size, 800))) <= maxW + 1) break;
+        size = sz; lines = D.balance(g, toks.map(k => k.w), maxW, size, 800, ml);
+      }
       const lh = size * 1.22, padX = 36, padY = 22;
       const widths = lines.map(l => D.measure(g, l.join(' '), size, 800));
       const bw = Math.max(...widths) + padX * 2, bh = lines.length * lh + padY * 2;

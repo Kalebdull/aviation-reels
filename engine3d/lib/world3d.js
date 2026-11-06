@@ -20,6 +20,10 @@ export function terrainHeight(x, z) { return 70 * fbm(x * 0.0016, z * 0.0016, 5)
 
 export function buildWorld(renderer, opts = {}) {
   const L = { ...LOOKS[opts.look || 'golden'], ...(opts.over || {}) };
+  // optional flat area (airports, towns): terrain blends to height fy inside radius fr
+  const F = opts.flat;
+  const ss = (a, b, x) => { const t = Math.max(0, Math.min(1, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
+  const heightAt = (x, z) => { const h = terrainHeight(x, z); if (!F) return h; const d = Math.hypot(x - (F.x || 0), z - (F.z || 0)); return h + ((F.y || 0) - h) * (1 - ss(F.r * 0.75, F.r, d)); };
   renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = L.exposure; renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
   const scene = new THREE.Scene();
@@ -58,7 +62,7 @@ export function buildWorld(renderer, opts = {}) {
   const fieldCols = ['#79A84B', '#97B653', '#D1B865', '#5F9A45', '#B4B35A', '#88AE4E', '#D8A85E', '#4F8A3F', '#A9C266'].map(c => new THREE.Color(c));
   const forest = new THREE.Color('#2E5A30');
   for (let i = 0; i < P.count; i++) {
-    const x = P.getX(i), z = P.getZ(i), h = terrainHeight(x, z);
+    const x = P.getX(i), z = P.getZ(i), h = heightAt(x, z);
     P.setY(i, h);
     const cx = Math.floor((x + 13) / 60 + 0.35 * Math.sin(z * 0.004)), cz = Math.floor((z + 7) / 45 + 0.35 * Math.sin(x * 0.004));
     let c = fieldCols[Math.floor(hash(cx, cz) * fieldCols.length)].clone();
@@ -81,12 +85,13 @@ export function buildWorld(renderer, opts = {}) {
   const trees = new THREE.InstancedMesh(treeG, new THREE.MeshStandardMaterial({ color: '#FFFFFF', roughness: 0.9 }), MAXT);
   const m4 = new THREE.Matrix4(); let n = 0;
   for (let i = 0; i < 400000 && n < MAXT; i++) {
-    const x = (hash(i, 1) - 0.5) * 2400, z = (hash(i, 2) - 0.5) * 2400;
+    const x = (hash(i, 1) - 0.5) * 5200, z = (hash(i, 2) - 0.5) * 5200;
     const forestHere = fbm(x * 0.004 + 3, z * 0.004, 3) > 0.62;
     const ex = Math.abs(((x + 13) / 60 + 0.35 * Math.sin(z * 0.004)) % 1), ez = Math.abs(((z + 7) / 45 + 0.35 * Math.sin(x * 0.004)) % 1), hedge = Math.min(ex, 1 - ex, ez, 1 - ez) < 0.025;
     if (!forestHere && !(hedge && hash(i, 3) < 0.6)) continue;
+    if (F && Math.hypot(x - (F.x || 0), z - (F.z || 0)) < F.r * (F.treeFree ?? 0.9)) continue;
     const s = 2.4 + hash(i, 4) * 2.2;
-    m4.compose(new THREE.Vector3(x, terrainHeight(x, z) + s * 0.5, z), new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), hash(i, 7) * 6.28), new THREE.Vector3(s, s, s));
+    m4.compose(new THREE.Vector3(x, heightAt(x, z) + s * 0.5, z), new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), hash(i, 7) * 6.28), new THREE.Vector3(s, s, s));
     trees.setMatrixAt(n++, m4);
     trees.setColorAt(n - 1, new THREE.Color().setHSL(0.25 + hash(i, 5) * 0.08, 0.42, 0.11 + hash(i, 6) * 0.07));
   }
@@ -107,7 +112,7 @@ export function buildWorld(renderer, opts = {}) {
     }
     c.position.set(cx, cy, cz); clouds.add(c);
   }
-  return { scene, sun, sunDir, look: L, clouds, terrain,
+  return { scene, sun, sunDir, look: L, clouds, terrain, heightAt,
     update(t, target) {
       // keep the shadow camera on the hero
       if (target) { sun.position.copy(target).addScaledVector(sunDir, 200); sun.target.position.copy(target); }
