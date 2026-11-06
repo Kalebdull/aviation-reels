@@ -30,7 +30,8 @@ arg = lambda k, d=None: next((a.split('=', 1)[1] for a in ARGS if a.startswith(f
 # ---- livery: one soft body colour, a white trim swoosh, one navy accent ----
 BODY = arg('body', '#1F4FC4')      # deep satin blue: top of the fuselage, tail, spinner
 TRIM = arg('trim', '#F7F8FA')      # white: belly, wings, stab, gear, wheel pants
-ACCENT = arg('accent', '#15171C')  # black: the swoosh between blue and white, canopy frame
+ACCENT = arg('accent', '#15171C')  # black: the swoosh between blue and white, canopy frame, spinner
+SPARK = arg('spark', '#FFB23F')    # Aviation Reels amber: the pinstripe and the tail slash
 TAG = arg('tag', '')
 
 DIH = math.radians(3.5)
@@ -216,6 +217,29 @@ def tinted_glass():
     return m
 
 
+def fin_material(ox=0.0, oz=0.0):
+    """Blue tail with the signature black + amber slash. ox/oz: the part's origin, so the slash continues across hinged parts."""
+    m = bpy.data.materials.new('FinLivery'); m.use_nodes = True; N, L = m.node_tree.nodes, m.node_tree.links
+    b = N['Principled BSDF']; b.inputs['Roughness'].default_value = 0.22; b.inputs['Metallic'].default_value = 0.45
+    if 'Coat Weight' in b.inputs: b.inputs['Coat Weight'].default_value = 1.0; b.inputs['Coat Roughness'].default_value = 0.04
+    tc = N.new('ShaderNodeTexCoord'); P = N.new('ShaderNodeSeparateXYZ'); L.new(tc.outputs['Object'], P.inputs[0])
+    # slash line rising toward the back: d = z - 1.15*(x - 5.0) - 0.18
+    d1 = N.new('ShaderNodeMath'); d1.operation = 'MULTIPLY_ADD'; L.new(P.outputs['X'], d1.inputs[0]); d1.inputs[1].default_value = -1.15; d1.inputs[2].default_value = 5.75 - 0.42 - 1.15 * ox + oz
+    d = N.new('ShaderNodeMath'); d.operation = 'ADD'; L.new(P.outputs['Z'], d.inputs[0]); L.new(d1.outputs[0], d.inputs[1])
+    def band(lo, hi):
+        r = N.new('ShaderNodeMapRange'); r.interpolation_type = 'LINEAR'; L.new(d.outputs[0], r.inputs['Value'])
+        r.inputs['From Min'].default_value = lo; r.inputs['From Max'].default_value = hi
+        g = N.new('ShaderNodeMath'); g.operation = 'COMPARE'; L.new(d.outputs[0], g.inputs[0]); g.inputs[1].default_value = (lo + hi) / 2; g.inputs[2].default_value = (hi - lo) / 2
+        return g.outputs[0]
+    def rgb(h):
+        n = N.new('ShaderNodeRGB'); n.outputs[0].default_value = lin(h); return n.outputs[0]
+    def mix(f, a, c):
+        n = N.new('ShaderNodeMix'); n.data_type = 'RGBA'; L.new(f, n.inputs['Factor']); L.new(a, n.inputs[6]); L.new(c, n.inputs[7]); return n.outputs[2]
+    c = mix(band(0.0, 0.11), rgb(BODY), rgb(ACCENT)); c = mix(band(0.135, 0.175), c, rgb(SPARK))
+    L.new(c, b.inputs['Base Color'])
+    return m
+
+
 def livery_material():
     m = bpy.data.materials.new('Livery'); m.use_nodes = True
     N, L = m.node_tree.nodes, m.node_tree.links
@@ -238,18 +262,22 @@ def livery_material():
     x, z = P.outputs['X'], P.outputs['Z']
     # split line: low at the cowl, rising gently under the canopy, up toward the tail (z = -0.29 + 0.075x)
     # blue nose, then the line sweeps up through the middle of the side toward the tail (white below)
-    split = math('ADD', -0.17, math('MULTIPLY', x, 0.075))
-    split = math('SUBTRACT', split, math('MULTIPLY', math('MAXIMUM', math('SUBTRACT', 0.9, x), 0.0), 0.12))
+    # speed swoosh: low at the nose, sweeping up through mid-side to high at the tail
+    split = math('ADD', -0.22, math('MULTIPLY', x, 0.10))
+    split = math('SUBTRACT', split, math('MULTIPLY', math('MAXIMUM', math('SUBTRACT', 0.9, x), 0.0), 0.10))
     dz = math('SUBTRACT', z, split)
     blue = band(dz, 0.0, 9.0, 0.004)
-    pin = band(dz, -0.024, -0.008, 0.002)            # thin white line just under the blue
-    black = band(dz, -0.085, -0.024, 0.003)         # the bold black swoosh
+    black = band(dz, -0.095, -0.020, 0.003)         # the bold black swoosh (a thin white line sits above it)
+    spark = band(dz, -0.142, -0.108, 0.002)         # amber pinstripe under it
     def rgb(hexv):
         n = N.new('ShaderNodeRGB'); n.outputs[0].default_value = lin(hexv); return n.outputs[0]
     def mix(fac, a, b):
         n = N.new('ShaderNodeMix'); n.data_type = 'RGBA'; L.new(fac, n.inputs['Factor']); L.new(a, n.inputs[6]); L.new(b, n.inputs[7]); return n.outputs[2]
-    c = mix(blue, rgb(TRIM), rgb(BODY)); c = mix(black, c, rgb(ACCENT))
+    c = mix(blue, rgb(TRIM), rgb(BODY)); c = mix(black, c, rgb(ACCENT)); c = mix(spark, c, rgb(SPARK))
     L.new(c, b.inputs['Base Color'])
+    # metallic-flake blue, plain gloss white
+    mm = N.new('ShaderNodeMath'); mm.operation = 'MULTIPLY'; L.new(blue, mm.inputs[0]); mm.inputs[1].default_value = 0.45
+    L.new(mm.outputs[0], b.inputs['Metallic'])
     return m
 
 
@@ -258,7 +286,7 @@ def build():
     bpy.ops.wm.read_factory_settings(use_empty=True)
     sc = bpy.context.scene
     M = {
-        'body': material('Paint_Body', BODY, rough=0.22, coat=1.0),
+        'body': material('Paint_Body', BODY, rough=0.24, metallic=0.45, coat=1.0),
         'trim': material('Paint_Trim', TRIM, rough=0.22, coat=1.0),
         'accent': material('Paint_Accent', ACCENT, rough=0.25, coat=1.0),
         'glass': material('Canopy', (0.74, 0.82, 0.90, 1), rough=0.0, transmission=1.0, ior=1.0),
@@ -356,7 +384,7 @@ def build():
     for i in range(1, 17):
         u = i / 16; r = 0.165 * (1 - (1 - u) ** 2.4)                                  # pointed ogive, flush with the cowl lip
         sp_rings.append([(-0.40 + 0.60 * u, r * math.cos(2 * math.pi * j / 48), r * math.sin(2 * math.pi * j / 48)) for j in range(48)])
-    new_obj('Spinner', loft(sp_rings, cap_start=True, cap_end=True), M['body'], parent=prop, loc=(-0.0, 0, 0), sub=1)
+    new_obj('Spinner', loft(sp_rings, cap_start=True, cap_end=True), M['accent'], parent=prop, loc=(-0.0, 0, 0), sub=1)
     for sgn in (1, -1):
         blade = []
         for i in range(13):                                             # tapered, slightly twisted blade
@@ -385,7 +413,7 @@ def build():
         for i in range(13):
             y = sgn * (TIP + (HALF - TIP) * i / 12); q = i / 12
             tip_rings.append(wing_ring(y, 0, 1, k=max(0.08, math.sqrt(max(0.0, 1 - q ** 2.2)))))
-        new_obj(f'WingTip_{side}', loft(tip_rings, cap_end=True), M['trim'], parent=root, sub=1)
+        new_obj(f'WingTip_{side}', loft(tip_rings, cap_end=True), M['body'], parent=root, sub=1)
         # control surfaces, built in hinge space: local X aft, local Y spanwise (outboard = sgn), local Z up
         for (y0, y1), kind, lim in ((FLAP, 'Flap', (0, 40)), (AIL, 'Aileron', (-20, 25))):
             ym = sgn * (y0 + y1) / 2
@@ -431,7 +459,7 @@ def build():
         le = 4.92 + (z - 0.30) * 0.70
         c = (HX - le) / 0.985
         fin_rings.append([(le + u * c, zz * c * 0.85, z) for (u, zz) in loop(0, 0.985, 0.095, 24, camber=0.0)])
-    new_obj('Fin', loft(fin_rings, cap_end=True), M['body'], parent=root, sub=1)
+    new_obj('Fin', loft(fin_rings, cap_end=True), fin_material(), parent=root, sub=1)
     rud = hinge('Rudder', root, (HX, 0, 0.12), (0, 0, 0), 'Z', -30, 30, 'rudder: rotate about local Z; + = trailing edge left (+Y)')
     rud_rings = []
     for i in range(26):
@@ -440,7 +468,7 @@ def build():
         fwd = 0.0 if z < 1.31 else 0.15 * min(1, (z - 1.31) / 0.03) * (1 if z < 1.38 else math.sqrt(max(0.05, 1 - ((z - 1.38) / 0.04) ** 2)))
         c = aft + fwd + 0.02
         rud_rings.append([(-fwd + u * c, zz * c * 0.8, z - 0.12) for (u, zz) in loop(0, 1, 0.11 if fwd > 0 else 0.085, 24, camber=0.0)])
-    new_obj('RudderPanel', loft(rud_rings, cap_start=True, cap_end=True), M['body'], parent=rud, sub=1)
+    new_obj('RudderPanel', loft(rud_rings, cap_start=True, cap_end=True), fin_material(HX, 0.12), parent=rud, sub=1)
     new_obj('Strobe', prim('sphere', r=0.03, u=16, v=8), M['white'], sub=1, parent=rud, loc=(0.40, 0, 0.62))
     rod('Antenna', (3.75, 0, 0.62), (3.95, 0, 0.92), 0.012, 0.006, M['interior'], root)
 
@@ -543,7 +571,7 @@ def sky(sc):
     cm = nt.nodes.new('ShaderNodeMath'); cm.operation = 'MULTIPLY'; nt.links.new(cr_.outputs['Result'], cm.inputs[0]); nt.links.new(hm.outputs['Result'], cm.inputs[1])
     mx = nt.nodes.new('ShaderNodeMix'); mx.data_type = 'RGBA'; nt.links.new(cm.outputs[0], mx.inputs['Factor']); nt.links.new(ramp.outputs['Color'], mx.inputs[6]); mx.inputs[7].default_value = lin('#F4F1EC')
     nt.links.new(mx.outputs[2], bg.inputs['Color']); bg.inputs['Strength'].default_value = 1.0
-    for name, energy, col, d in (('Sun', 3.6, (1.0, 0.88, 0.74), (-0.8, 0.9, 0.45)), ('SkyFill', 1.0, (0.78, 0.86, 1.0), (0.6, -0.4, 0.9))):
+    for name, energy, col, d in (('Sun', 4.2, (1.0, 0.80, 0.60), (-0.55, 1.0, 0.32)), ('SkyFill', 0.9, (0.74, 0.84, 1.0), (0.6, -0.4, 0.9)), ('Rim', 2.4, (1.0, 0.78, 0.55), (0.9, -0.6, 0.25))):
         L = bpy.data.lights.new(name, 'SUN'); L.energy = energy; L.color = col; L.angle = math.radians(3)
         o = bpy.data.objects.new(name, L); sc.collection.objects.link(o); o.rotation_euler = (-Vector(d)).to_track_quat('-Z', 'Y').to_euler()
     bm = bmesh.new(); bmesh.ops.create_grid(bm, x_segments=1, y_segments=1, size=12000)
@@ -574,7 +602,7 @@ STUDIO_SHOTS = {
     'studio_top': ((3.0, 0.01, 16.0), (3.0, 0, 0)),
     'studio_low': ((-7.5, 7.5, -0.95), (2.6, 0, 0.25)),
 }
-SKY_SHOTS = {'beauty': ((-10.2, 8.6, -1.3), (2.3, 0.3, 0.2))}
+SKY_SHOTS = {'beauty': ((-9.0, 7.4, -1.7), (2.4, 0.9, 0.35))}
 
 
 def render(sc, name, loc, look, lens=70):
