@@ -25,7 +25,6 @@ export default async function ({ THREE, scene, camera, world, load, props, T }) 
   const bubble = props.airspace({ H, tiers: TIERS, color: '#4F8DFF', edge: '#CFE1FF' }); scene.add(bubble.group);
 
   // ---------------- the airliner we ride in, and our RV-7
-  const jet = props.airliner(); jet.group.scale.setScalar(2.6); jet.group.rotation.y = Math.PI; scene.add(jet.group);   // nose → +X
   const { loadRV7 } = await import('/engine3d/lib/rv7.js');
   const R = await loadRV7(load); const rv = R.group, rvProp = R.prop; rv.scale.setScalar(5); scene.add(rv);
 
@@ -55,7 +54,7 @@ export default async function ({ THREE, scene, camera, world, load, props, T }) 
   T.cue(tDome, 'whoosh', 0.5); T.cue(tUpside + 0.1, 'swish', 0.7); T.cue(tCake, 'chime', 0.8);
   T.cue(tUnder - 0.4, 'whoosh', 0.7); T.cue(tWin, 'whoosh', 0.6); T.cue(tInside, 'chime', 0.7); T.cue(tEnd, 'whoosh', 0.5); T.cue(S(10).t1, 'blip', 0.5);
 
-  // airliner: cruises toward the bubble, waits at the gate's pace, glides in after permission
+  // landing path into the airport (used only for the window-seat camera at the end; no airliner on screen)
   const tGatePass = Math.max(tPerm + 1.2, S(3).t1 - 0.1);
   const jetAt = t => {
     const x0 = -2700, xg = -905;
@@ -67,16 +66,22 @@ export default async function ({ THREE, scene, camera, world, load, props, T }) 
   };
   const rvUnder = t => { const u = t - (tUnder - 2.2); return new THREE.Vector3(-1350 + 150 * u, 150 + 6 * Math.sin(u * 1.3), 230 - 10 * u); };
   const rvOpen = t => new THREE.Vector3(-1900 + 78 * t, 470 - 5 * t + 3 * Math.sin(t * 0.9), 140);          // the opening: our RV-7 heading for the city
-  const rvAt = t => (t < tGated ? rvOpen(t) : rvUnder(t));
+  // our RV-7 is the only airplane: it slows at the gate, waits for permission, then flies through into the bubble
+  const G0 = new THREE.Vector3(-1010, 445, -40), tGo = tPerm + 0.4;
+  const rvGate = t => {
+    if (t < tGo) { const u = M.clamp((t - tGated) / (tGo - tGated), 0, 1), e = u * u * (3 - 2 * u); return rvOpen(tGated).lerp(G0, e); }
+    const d = t - tGo; return G0.clone().add(new THREE.Vector3(30 * d + 45 * d * d, -4 * d, 0));
+  };
+  const rvAt = t => (t < tGated ? rvOpen(t) : t < tUnder - 3 ? rvGate(t) : rvUnder(t));
 
   // ---------------- camera choreography (smooth camera spring between keys; the window shot is a cut)
   const wide = { pos: [-2300, 1300, 2700], look: [-60, 260, 0], fov: 38 };
   const profile = { pos: [520, 330, 2500], look: [560, 300, 0], fov: 40 };
   const camKeys = [
-    { t: -1, pos: [-2150, 560, 110], look: [-1300, 420, -30], fov: 40 },             // chasing the jet
+    { t: -1, pos: [-2150, 560, 110], look: [-1300, 420, -30], fov: 40 },             // (overridden by the RV-7 chase)
     { t: tBubble - 0.6, pos: [-2250, 640, 260], look: [-700, 380, -30], fov: 42 },     // the bubble ahead
     { t: tAir - 0.3, pos: [-2600, 1100, 1700], look: [-300, 300, -30], fov: 40 },      // pull back: the whole bubble
-    { t: tGated - 0.35, pos: [-1380, 560, 250], look: [-905, 450, -40], fov: 40 },     // the gate
+    { t: tGated - 0.35, pos: [-1560, 520, 330], look: [-960, 440, -60], fov: 40 },     // the gate, the RV-7 rolling up to it
     { t: tHuge - 0.25, ...wide },                                                      // huge
     { t: t10k - 0.6, ...profile },                                                     // side view: ruler + skyscrapers
     { t: tDome - 0.4, pos: [-150, 420, 3300], look: [0, 330, 0], fov: 40 },            // the shape
@@ -92,11 +97,8 @@ export default async function ({ THREE, scene, camera, world, load, props, T }) 
     const morph = 1 - T.in(t, tDome - 0.1, 'heavy') + T.in(t, tUpside, 'heavy');
     const glow = 1 + 0.6 * T.win(t, tInside, tInside + 1.2, 'default');
     bubble.set(M.clamp(morph, 0, 1), show * glow);
-    // jet
-    const jp = jetAt(t); jet.group.position.copy(jp); jet.set(t, { gear: t > tGatePass + 6 }); jet.group.visible = !(t >= tWin && t < tEnd);
-    const jn = jetAt(t + 0.05); jet.group.rotation.z = Math.atan2(jn.y - jp.y, jn.x - jp.x) * 0.9;
-    // gate: pops in on "gated", lifts after "permission", fades once the jet is through
-    const gIn = T.in(t, tGated, 'default') * T.out(t, tGatePass + 1.4);
+    // gate: pops in on "gated", lifts after "permission", fades once the RV-7 is through
+    const gIn = T.in(t, tGated, 'default') * T.out(t, tHuge - 0.3);
     gate.group.visible = gIn > 0.01; gate.group.scale.setScalar(12 * Math.max(0.01, gIn));
     gate.set(T.in(t, tPerm + 0.35, 'default'), t > tPerm ? 1 : 0);
     tw.cab(T.win(t, tPerm - 0.05, tPerm + 2.0), '#3BFF8E');
@@ -115,9 +117,10 @@ export default async function ({ THREE, scene, camera, world, load, props, T }) 
     cake.position.set(M.lerp(-380, 0, merge), M.lerp(700, flip > 0.5 ? H : 0, merge) + (flip > 0.5 ? M.lerp(330, 0, merge) : 0), M.lerp(300, 0, merge));
     cake.traverse(o => { if (o.isMesh) o.material.opacity = cIn * (1 - 0.85 * merge); });
     // RV-7 under the edge
-    const rp = rvAt(t); rv.position.copy(rp); rv.rotation.set(0, Math.PI + 0.06, Math.sin(t * 1.1) * 0.06);
-    rv.visible = t < tGated - 0.1 || (t > tUnder - 3 && t < tWin + 0.2);
-    if (t < tGated) rv.rotation.set(Math.sin(t * 0.7) * 0.03, Math.PI + 0.04, 0.08 + Math.sin(t * 0.9) * 0.05);
+    const rp = rvAt(t), rn = rvAt(t + 0.05); rv.position.copy(rp);
+    const yaw = Math.atan2(-(rn.z - rp.z), Math.max(0.01, rn.x - rp.x));       // nose follows the flight path
+    rv.rotation.set(Math.sin(t * 0.7) * 0.03, Math.PI + yaw, 0.08 + Math.sin(t * 0.9) * 0.05 - yaw * 0.6);
+    rv.visible = t < tHuge + 0.3 || (t > tUnder - 3 && t < tWin + 0.2);
     if (rvProp) rvProp.rotation.x = t * 45;
     // camera
     if (t >= tWin && t < tEnd) {                                               // inside the cabin, looking out the window
@@ -136,6 +139,11 @@ export default async function ({ THREE, scene, camera, world, load, props, T }) 
         const target = new THREE.Vector3(-150, 200, -40), dir = r.clone().sub(target).normalize();
         const reveal = r.clone().addScaledVector(dir, 300).add(new THREE.Vector3(0, -20, 0)), revealLook = target.clone().add(new THREE.Vector3(0, -200, 0));
         pos = hero.lerp(reveal, e); look = heroLook.lerp(revealLook, e);
+      }
+      if (t >= tGated - 0.35 && t < tHuge - 0.25) {                       // close chase through the gate: RV-7 big, gate ahead
+        const r = rvAt(t), w = M.clamp((t - (tGated - 0.35)) / 0.8, 0, 1);
+        pos = pos.clone().lerp(r.clone().add(new THREE.Vector3(-150, 34, 120)), w);
+        look = look.clone().lerp(r.clone().lerp(G0.clone().add(new THREE.Vector3(60, 0, -60)), 0.5).add(new THREE.Vector3(0, -40, 0)), w);
       }
       if (t > tUnder - 2.2 && t < tWin) {                                // ride alongside the RV-7, looking up at the shelf
         const r = rvAt(t); const w = M.clamp((t - (tUnder - 2.2)) / 0.7, 0, 1);
