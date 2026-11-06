@@ -603,7 +603,7 @@ STUDIO_SHOTS = {
     'studio_top': ((3.0, 0.01, 16.0), (3.0, 0, 0)),
     'studio_low': ((-7.5, 7.5, -0.95), (2.6, 0, 0.25)),
 }
-SKY_SHOTS = {'beauty': ((-9.0, 7.4, -1.7), (2.4, 0.9, 0.35))}
+SKY_SHOTS = {'beauty': ((-12.0, 9.4, -2.0), (1.6, 0.0, 0.25))}
 
 
 def render(sc, name, loc, look, lens=70):
