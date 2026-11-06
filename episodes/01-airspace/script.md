@@ -1,6 +1,6 @@
 # Ep 01: Airspace (for someone hearing about it for the first time)
 
-Status: DRAFT v2 (waiting for Kaleb's approval)
+Status: APPROVED (Kaleb, Nov 2026)
 
 ## Direction from Kaleb
 One simple bubble that shows what airspace looks like, plus one fact non-aviators can relate to. They've never heard of it, so we turn nothing into something with a relatable explanation. The opener must be something everyone relates to.

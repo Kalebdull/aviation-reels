@@ -1,0 +1,11 @@
+<!doctype html><html><head><meta charset="utf-8"><title>3D episode</title>
+<style>html,body{margin:0;background:#111}#wrap{position:relative;width:1080px;height:1920px;transform-origin:0 0}#wrap canvas{position:absolute;left:0;top:0}#err{position:fixed;top:8px;left:8px;color:#f88;font:14px monospace;white-space:pre-wrap;z-index:9}</style>
+<script type="importmap">{"imports":{"three":"/node_modules/three/build/three.module.js","three/addons/":"/node_modules/three/examples/jsm/"}}</script>
+</head><body><div id="err"></div><div id="wrap"></div>
+<script type="module" src="./runtime.js"></script>
+<script>
+if (!/[?&]render\b/.test(location.search)) addEventListener('load', () => {
+  const w = document.getElementById('wrap'); const fit = () => { const s = Math.min(innerHeight / 1920, innerWidth / 1080); w.style.transform = `scale(${s})`; }; fit(); addEventListener('resize', fit);
+  const go = () => { if (!window.seek) return setTimeout(go, 200); let t0 = performance.now(); const tick = () => { const t = ((performance.now() - t0) / 1000) % (window.DURATION || 10); window.seek(t); requestAnimationFrame(tick); }; tick(); }; go();   // preview only
+});
+</script></body></html>

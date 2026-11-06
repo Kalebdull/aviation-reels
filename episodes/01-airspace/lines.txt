@@ -1,2 +1,12 @@
-# One spoken line per row, exactly as in the CapCut block (without the ". . .").
-# Optional caption override after " | " — use *word* for an amber keyword, "-" for no caption.
+# Ep 01 Airspace (approved v2). One spoken line per row. Caption overrides after " | ".
+Every time you land at a big airport, you fly through an invisible bubble. | Every time you land at a big airport, you fly through an *invisible bubble.*
+Pilots call it airspace. | Pilots call it *airspace.*
+Think of it like a gated neighborhood in the sky. | Think of it like a *gated neighborhood* in the sky.
+To get in, you need permission from air traffic control. | To get in, you need *permission* from air traffic control.
+And this bubble is huge. | And this bubble is *huge.*
+Around the busiest airports, it reaches 10,000 feet up. | Around the busiest airports, it reaches *10,000 feet* up.
+That's more than six Empire State Buildings stacked on top of each other. | That's more than *six Empire State Buildings* stacked up.
+But it's not a dome. It's shaped like an upside-down wedding cake. | It's not a dome. It's an *upside-down wedding cake.*
+Small near the ground, wider as it climbs, so small planes can fly underneath the edges. | Small near the ground, wider as it climbs, so small planes fly *underneath.*
+So next time you land, look out the window. You're inside the cake. | Next time you land, look out the window. You're *inside the cake.*
+What should we break down next? | What should we *break down* next?
