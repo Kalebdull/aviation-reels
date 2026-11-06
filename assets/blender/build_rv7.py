@@ -143,9 +143,9 @@ def loop(u0, u1, t, n=14, camber=0.018):
 # ================================================================ fuselage
 # station x, half-width, top, bottom  (RV-7: deep cabin, short cowl, slim tailcone)
 FUSE = [
-    (0.20, 0.43, 0.27, -0.29), (0.45, 0.53, 0.39, -0.40), (0.85, 0.575, 0.48, -0.45), (1.25, 0.59, 0.55, -0.46),
-    (1.70, 0.595, 0.60, -0.45), (2.40, 0.595, 0.63, -0.42), (3.00, 0.56, 0.72, -0.36), (3.80, 0.42, 0.64, -0.18),
-    (4.75, 0.27, 0.50, -0.02), (5.60, 0.13, 0.40, 0.08), (6.02, 0.04, 0.37, 0.13),
+    (0.20, 0.43, 0.27, -0.24), (0.45, 0.53, 0.39, -0.32), (0.85, 0.575, 0.48, -0.36), (1.25, 0.59, 0.55, -0.37),
+    (1.70, 0.595, 0.60, -0.36), (2.40, 0.595, 0.63, -0.33), (3.00, 0.56, 0.72, -0.27), (3.80, 0.42, 0.64, -0.12),
+    (4.75, 0.27, 0.50, 0.02), (5.60, 0.13, 0.40, 0.10), (6.02, 0.04, 0.37, 0.15),
 ]
 
 
@@ -198,6 +198,7 @@ def fsection(x, n=104, k=3.3):
         th = 2 * math.pi * j / n; c, s = math.cos(th), math.sin(th)
         y = math.copysign(abs(c) ** (2 / k), c) * hw
         z = mid + math.copysign(abs(s) ** (2 / k), s) * hh
+        if s < 0: y *= 1 - 0.22 * (-s) ** 1.5             # the belly narrows toward the bottom
         if s > 0: z += canopy_add(x, y)
         out.append((x, y, z))
     return out
@@ -263,7 +264,7 @@ def livery_material():
     # split line: low at the cowl, rising gently under the canopy, up toward the tail (z = -0.29 + 0.075x)
     # blue nose, then the line sweeps up through the middle of the side toward the tail (white below)
     # speed swoosh: low at the nose, sweeping up through mid-side to high at the tail
-    split = math('ADD', -0.22, math('MULTIPLY', x, 0.10))
+    split = math('ADD', -0.15, math('MULTIPLY', x, 0.09))
     split = math('SUBTRACT', split, math('MULTIPLY', math('MAXIMUM', math('SUBTRACT', 0.9, x), 0.0), 0.10))
     dz = math('SUBTRACT', z, split)
     blue = band(dz, 0.0, 9.0, 0.004)
@@ -350,9 +351,9 @@ def build():
     new_obj('Panel', prim('cube', scale=(0.14, 1.0, 0.26)), M['interior'], sub=1, parent=root, loc=(1.66, 0, 0.44))
     for y in (0.24, -0.24):
         new_obj('Screen', prim('cube', scale=(0.01, 0.2, 0.14)), M['screen'], sub=0, parent=root, loc=(1.735, y, 0.45))
-        new_obj('SeatBase', prim('cube', scale=(0.5, 0.42, 0.12)), M['seat'], sub=2, parent=root, loc=(2.42, y, -0.16))
+        new_obj('SeatBase', prim('cube', scale=(0.5, 0.42, 0.12)), M['seat'], sub=2, parent=root, loc=(2.42, y, -0.08))
         new_obj('SeatBack', prim('cube', scale=(0.12, 0.42, 0.62)), M['seat'], sub=2, parent=root, loc=(2.72, y, 0.2), rot=(0, 0.28, 0))
-        rod('Stick', (2.12, y, -0.26), (2.06, y, 0.14), 0.016, 0.012, M['interior'], root)
+        rod('Stick', (2.12, y, -0.18), (2.06, y, 0.2), 0.016, 0.012, M['interior'], root)
         new_obj('StickGrip', prim('sphere', r=0.03), M['rubber'], sub=1, parent=root, loc=(2.06, y, 0.16))
 
     # ---------- cowling details: inlets, exhausts ----------
@@ -376,7 +377,7 @@ def build():
         fus = bpy.data.objects['Fuselage']
         bo = fus.modifiers.new(f'Intake{"L" if y > 0 else "R"}', 'BOOLEAN'); bo.operation = 'DIFFERENCE'; bo.object = cutter; bo.solver = 'EXACT'
         fus.modifiers.move(len(fus.modifiers) - 1, 0)
-        rod('Exhaust', (1.0, y * 0.8, -0.38), (1.12, y * 0.85, -0.54), 0.028, 0.028, M['exhaust'], root)
+        rod('Exhaust', (1.0, y * 0.8, -0.30), (1.12, y * 0.85, -0.46), 0.028, 0.028, M['exhaust'], root)
 
     # ---------- prop + spinner (spin about X) ----------
     prop = hinge('Prop', root, (0.04, 0, -0.04), (0, 0, 0), 'X', -1e9, 1e9, 'spins about X; ~2,400 rpm at cruise (animate 40 rad/s for a soft blur)')
@@ -398,7 +399,7 @@ def build():
 
     # ---------- wing: fixed core + flap + aileron per side + rounded tips, 3.5° dihedral ----------
     XLE, CH, HALF, F = 1.30, 1.47, 3.81, 0.76                          # LE station, chord, half span, hinge at 76 % chord
-    Z0 = -0.37
+    Z0 = -0.29
     zc = lambda y: Z0 + abs(y) * math.tan(DIH)
     FLAP = (0.60, 2.08); AIL = (2.13, 3.42); TIP = 3.44
 
@@ -475,7 +476,7 @@ def build():
     # ---------- landing gear: tapered spring legs with fairings, teardrop wheel pants, steerable tailwheel ----------
     WX, WY, WZ, WR = 1.08, 0.97, -1.03, 0.17
     for sgn, side in ((1, 'L'), (-1, 'R')):
-        rod(f'GearLeg_{side}', (1.28, sgn * 0.44, -0.43), (WX + 0.02, sgn * (WY - 0.1), WZ + 0.12), 0.05, 0.034, M['trim'], root)
+        rod(f'GearLeg_{side}', (1.28, sgn * 0.40, -0.34), (WX + 0.02, sgn * (WY - 0.1), WZ + 0.12), 0.05, 0.034, M['trim'], root)
         pant = prim('sphere', r=1, u=64, v=32)
         for v in pant.verts:
             aft = max(0.0, v.co.x); taper = 1 - 0.62 * aft ** 1.4                       # tapers to a narrow, rounded tail
