@@ -85,7 +85,7 @@ export default async function ({ THREE, scene, camera, world, load, props, T }) 
     { t: tHuge - 0.25, ...wide },                                                      // huge
     { t: t10k - 0.6, ...profile },                                                     // side view: ruler + skyscrapers
     { t: tDome - 0.4, pos: [-150, 420, 3300], look: [0, 330, 0], fov: 40 },            // the shape
-    { t: tUnder - 3.4, pos: [-1500, 120, 420], look: [-1000, 300, 200], fov: 46, d: 2.2 },   // under the edge (slow glide)
+    { t: tUnder - 4.2, pos: [-1500, 120, 420], look: [-1000, 300, 200], fov: 46, d: 3.6 },   // under the edge (slow glide)
     { t: tEnd, ...wide },                                                              // the end: the whole cake
   ];
   const v3 = a => new THREE.Vector3(...a);
@@ -129,7 +129,7 @@ export default async function ({ THREE, scene, camera, world, load, props, T }) 
     } else {
       // camera: each move eases in and out (smootherstep: zero speed AND zero acceleration at both ends, so no jolts)
       const k = (() => { const P = new THREE.Vector3(...camKeys[0].pos), L = new THREE.Vector3(...camKeys[0].look); let f = camKeys[0].fov || 40;
-        for (let i = 1; i < camKeys.length; i++) { const a = camKeys[i - 1], b = camKeys[i], d = b.d || 1.4; const u = M.clamp((t - b.t) / d, 0, 1), e = u * u * u * (u * (u * 6 - 15) + 10);
+        for (let i = 1; i < camKeys.length; i++) { const a = camKeys[i - 1], b = camKeys[i], d = b.d || 3.0; const u = M.clamp((t - b.t) / d, 0, 1), e = u * u * u * (u * (u * 6 - 15) + 10);
           P.addScaledVector(new THREE.Vector3(...b.pos).sub(new THREE.Vector3(...a.pos)), e); L.addScaledVector(new THREE.Vector3(...b.look).sub(new THREE.Vector3(...a.look)), e); f += ((b.fov || 40) - (a.fov || 40)) * e; }
         return { pos: P, look: L, fov: f }; })();
       let pos = k.pos, look = k.look;
@@ -214,6 +214,5 @@ export default async function ({ THREE, scene, camera, world, load, props, T }) 
     for (const x of [box.min.x, box.max.x]) for (const y of [box.min.y, box.max.y]) for (const z of [box.min.z, box.max.z]) { const q = proj(new THREE.Vector3(x, y, z)); xs.push(q[0]); ys.push(q[1]); }
     return [Math.round(Math.min(...xs)), Math.round(Math.min(...ys)), Math.round(Math.max(...xs)), Math.round(Math.max(...ys))];
   };
-  window.__camPath = (t0, t1, dt) => { const out = []; for (let t = t0; t <= t1; t += dt) { update(t); out.push([+t.toFixed(3), ...camera.position.toArray().map(v => +v.toFixed(1))]); } return out; };
   return { topic: 'Airspace', update, overlay, tail: 1.6 };
 }
