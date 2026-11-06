@@ -142,9 +142,9 @@ def loop(u0, u1, t, n=14, camber=0.018):
 # ================================================================ fuselage
 # station x, half-width, top, bottom  (RV-7: deep cabin, short cowl, slim tailcone)
 FUSE = [
-    (0.20, 0.36, 0.20, -0.28), (0.45, 0.475, 0.31, -0.39), (0.85, 0.545, 0.39, -0.45), (1.25, 0.575, 0.44, -0.46),
-    (1.70, 0.585, 0.47, -0.45), (2.40, 0.59, 0.49, -0.42), (3.00, 0.555, 0.495, -0.36), (3.80, 0.40, 0.455, -0.18),
-    (4.75, 0.25, 0.395, -0.02), (5.60, 0.12, 0.35, 0.08), (6.02, 0.035, 0.33, 0.13),
+    (0.20, 0.43, 0.27, -0.29), (0.45, 0.53, 0.39, -0.40), (0.85, 0.575, 0.48, -0.45), (1.25, 0.59, 0.55, -0.46),
+    (1.70, 0.595, 0.60, -0.45), (2.40, 0.595, 0.63, -0.42), (3.00, 0.56, 0.72, -0.36), (3.80, 0.42, 0.64, -0.18),
+    (4.75, 0.27, 0.50, -0.02), (5.60, 0.13, 0.40, 0.08), (6.02, 0.04, 0.37, 0.13),
 ]
 
 
@@ -173,9 +173,9 @@ def canopy_add(x, y):
     """Extra height the canopy adds to the fuselage top at (x, y). Zero at the sides and both ends, so the glass grows
     out of the skin with no seam: the cabin sides flow straight up into it and it lands on the turtledeck."""
     if not (CX0 < x < CX1): return 0.0
-    hw = fstation(x)[0]; q = (abs(y) / hw) / 0.80        # the bulge starts exactly at the glass sill line
+    hw = fstation(x)[0]; q = (abs(y) / hw) / 0.88        # the bulge starts exactly at the glass sill line
     if q >= 1: return 0.0
-    return canopy_h((x - CX0) / (CX1 - CX0)) * (1 - q ** 2.6) ** 0.5
+    return canopy_h((x - CX0) / (CX1 - CX0)) * (1 - q ** 3.2) ** 0.35      # flat-topped, broad
 
 
 def fsurf_z(x, y, k=3.3):
@@ -185,7 +185,7 @@ def fsurf_z(x, y, k=3.3):
     return mid + s_ ** (2 / k) * hh + canopy_add(x, y)
 
 
-def canopy_h(u, H=0.40):
+def canopy_h(u, H=0.25):
     """Canopy height above the deck line along its length: steep raked windscreen, long low taper into the turtledeck."""
     return H * math.sin(math.pi * max(0.0, min(1.0, u)) ** 0.72) ** 0.8
 
@@ -302,7 +302,7 @@ def build():
         if math.sin(th) <= 0: return False
         q = abs(math.cos(th)) ** (2 / 3.3)                       # = |y| / half-width for this row
         xm = (xs[min(i, len(xs) - 1)] + xs[min(i + 1, len(xs) - 1)]) / 2
-        return q < 0.80 and canopy_h((xm - CX0) / (CX1 - CX0)) > 0.012 if CX0 < xm < CX1 else False
+        return q < 0.88 and canopy_h((xm - CX0) / (CX1 - CX0)) > 0.012 if CX0 < xm < CX1 else False
     new_obj('Fuselage', loft(rings, closed=True, cap_start=True, cap_end=True, mat_of=lambda i, j: 1 if is_glass(i, j) else 0),
             (livery_material(), tinted_glass()), parent=root, sub=1)
     # black canopy frame: rails along both sills + the windscreen bow, all lying ON the skin
@@ -319,19 +319,19 @@ def build():
         tube(name, [(rings[ib][j][0], rings[ib][j][1], rings[ib][j][2] + 0.006) for j in js], 0.016, M['accent'], root)
 
     # ---------- interior: panel with two screens, two seats, two sticks ----------
-    new_obj('Panel', prim('cube', scale=(0.14, 1.0, 0.26)), M['interior'], sub=1, parent=root, loc=(1.66, 0, 0.36))
+    new_obj('Panel', prim('cube', scale=(0.14, 1.0, 0.26)), M['interior'], sub=1, parent=root, loc=(1.66, 0, 0.44))
     for y in (0.24, -0.24):
-        new_obj('Screen', prim('cube', scale=(0.01, 0.2, 0.14)), M['screen'], sub=0, parent=root, loc=(1.735, y, 0.37))
+        new_obj('Screen', prim('cube', scale=(0.01, 0.2, 0.14)), M['screen'], sub=0, parent=root, loc=(1.735, y, 0.45))
         new_obj('SeatBase', prim('cube', scale=(0.5, 0.42, 0.12)), M['seat'], sub=2, parent=root, loc=(2.42, y, -0.16))
-        new_obj('SeatBack', prim('cube', scale=(0.12, 0.42, 0.62)), M['seat'], sub=2, parent=root, loc=(2.72, y, 0.15), rot=(0, 0.28, 0))
+        new_obj('SeatBack', prim('cube', scale=(0.12, 0.42, 0.62)), M['seat'], sub=2, parent=root, loc=(2.72, y, 0.2), rot=(0, 0.28, 0))
         rod('Stick', (2.12, y, -0.26), (2.06, y, 0.14), 0.016, 0.012, M['interior'], root)
         new_obj('StickGrip', prim('sphere', r=0.03), M['rubber'], sub=1, parent=root, loc=(2.06, y, 0.16))
 
     # ---------- cowling details: inlets, exhausts ----------
-    for y in (0.235, -0.235):
+    for y in (0.27, -0.27):
         # sporty round intakes: open oval mouths with thin lips, long cheeks flowing back into the cowl
-        R, r_, EZ = 0.064, 0.011, 0.78                     # mouth radius, lip radius, vertical squash (oval)
-        cx, cz = 0.205, 0.035
+        R, r_, EZ = 0.088, 0.013, 0.8                     # mouth radius, lip radius, vertical squash (oval)
+        cx, cz = 0.205, 0.05
         cheek = prim('sphere', r=1, u=48, v=24)
         bmesh.ops.delete(cheek, geom=[v for v in cheek.verts if v.co.x < -0.05], context='VERTS')     # open at the front
         for v in cheek.verts:
@@ -427,22 +427,22 @@ def build():
     HX = 5.86
     fin_rings = []
     for i in range(20):
-        z = 0.30 + (1.16 - 0.30) * i / 19
-        le = 4.92 + (z - 0.30) * 0.78
+        z = 0.30 + (1.30 - 0.30) * i / 19
+        le = 4.92 + (z - 0.30) * 0.70
         c = (HX - le) / 0.985
         fin_rings.append([(le + u * c, zz * c * 0.85, z) for (u, zz) in loop(0, 0.985, 0.095, 24, camber=0.0)])
     new_obj('Fin', loft(fin_rings, cap_end=True), M['body'], parent=root, sub=1)
     rud = hinge('Rudder', root, (HX, 0, 0.12), (0, 0, 0), 'Z', -30, 30, 'rudder: rotate about local Z; + = trailing edge left (+Y)')
     rud_rings = []
     for i in range(26):
-        z = 0.10 + (1.28 - 0.10) * i / 25
-        aft = (0.36 + 0.06 * (z - 0.1)) * (1 if z < 1.2 else math.sqrt(max(0.05, 1 - ((z - 1.2) / 0.08) ** 2)))
-        fwd = 0.0 if z < 1.17 else 0.15 * min(1, (z - 1.17) / 0.03) * (1 if z < 1.24 else math.sqrt(max(0.05, 1 - ((z - 1.24) / 0.04) ** 2)))
+        z = 0.10 + (1.42 - 0.10) * i / 25
+        aft = (0.36 + 0.06 * (z - 0.1)) * (1 if z < 1.34 else math.sqrt(max(0.05, 1 - ((z - 1.34) / 0.08) ** 2)))
+        fwd = 0.0 if z < 1.31 else 0.15 * min(1, (z - 1.31) / 0.03) * (1 if z < 1.38 else math.sqrt(max(0.05, 1 - ((z - 1.38) / 0.04) ** 2)))
         c = aft + fwd + 0.02
         rud_rings.append([(-fwd + u * c, zz * c * 0.8, z - 0.12) for (u, zz) in loop(0, 1, 0.11 if fwd > 0 else 0.085, 24, camber=0.0)])
     new_obj('RudderPanel', loft(rud_rings, cap_start=True, cap_end=True), M['body'], parent=rud, sub=1)
     new_obj('Strobe', prim('sphere', r=0.03, u=16, v=8), M['white'], sub=1, parent=rud, loc=(0.40, 0, 0.62))
-    rod('Antenna', (3.75, 0, 0.49), (3.95, 0, 0.78), 0.012, 0.006, M['interior'], root)
+    rod('Antenna', (3.75, 0, 0.62), (3.95, 0, 0.92), 0.012, 0.006, M['interior'], root)
 
     # ---------- landing gear: tapered spring legs with fairings, teardrop wheel pants, steerable tailwheel ----------
     WX, WY, WZ, WR = 1.08, 0.97, -1.03, 0.17
